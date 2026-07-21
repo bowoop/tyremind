@@ -18,6 +18,7 @@
 
 import { useState } from "react";
 import { fleet, TyreStatus, TyrePosition } from "../../services/tyreData";
+import { hitungDIEIS, estimasiDegradasi, MODEL_META } from "../../services/degradationModel";
 
 // ─────────────────────────────────────────────
 // STATUS THEME — selaras dengan DashboardOverview.jsx / MainLayout.jsx
@@ -60,6 +61,100 @@ function degradationStatus(pct) {
   if (pct >= 40) return TyreStatus.CRITICAL;
   if (pct >= 25) return TyreStatus.WARNING;
   return TyreStatus.NORMAL;
+}
+
+// ─────────────────────────────────────────────
+// SMART ALERTS — kontekstual per-ban (dipindah dari Alerts.jsx,
+// sebelumnya menampilkan seluruh ban unit; sekarang hanya alert
+// untuk ban yang sedang dipilih di Tyre Monitoring).
+// ─────────────────────────────────────────────
+
+function generateTyreAlerts(tyre) {
+  const alerts = [];
+
+  const pStatus = pressureStatus(tyre.pressurePsi);
+  if (pStatus !== TyreStatus.NORMAL) {
+    alerts.push({
+      id: `${tyre.id}-pressure`,
+      type: "Abnormal Pressure",
+      severity: pStatus,
+      message: `Tekanan ban tercatat ${tyre.pressurePsi} PSI — di bawah rentang normal 95–105 PSI.`,
+    });
+  }
+
+  const dStatus = degradationStatus(tyre.materialDegradationPct);
+  if (dStatus !== TyreStatus.NORMAL) {
+    alerts.push({
+      id: `${tyre.id}-degradation`,
+      type: "Rapid Material Degradation",
+      severity: dStatus,
+      message: `Degradasi material kimia mencapai ${tyre.materialDegradationPct}% — melewati ambang batas aman.`,
+    });
+  }
+
+  const severityRank = { [TyreStatus.CRITICAL]: 0, [TyreStatus.WARNING]: 1, [TyreStatus.NORMAL]: 2 };
+  return alerts.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
+}
+
+function IconAlertTriangle({ className, color }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M10 2L2.5 15.5H17.5L10 2Z" stroke={color} strokeWidth="1.7" strokeLinejoin="round" />
+      <line x1="10" y1="8.5" x2="10" y2="12" stroke={color} strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="10" cy="14" r="0.8" fill={color} />
+    </svg>
+  );
+}
+
+function SmartAlertCard({ alert }) {
+  const meta = STATUS_META[alert.severity];
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-[#EEF3F0] p-4">
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: meta.soft }}
+      >
+        <IconAlertTriangle className="w-4 h-4" color={meta.text} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <p className="text-[#0B3B2D] text-[13px] font-bold leading-tight">{alert.type}</p>
+          <StatusPill status={alert.severity} />
+        </div>
+        <p className="text-[#6B8F7A] text-[12px] leading-snug">{alert.message}</p>
+      </div>
+    </div>
+  );
+}
+
+function TyreSmartAlerts({ tyre }) {
+  const alerts = generateTyreAlerts(tyre);
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em]">
+          Smart Alerts — {tyre.id}
+        </p>
+        {alerts.some((a) => a.severity === TyreStatus.CRITICAL) && (
+          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#FBEAE6] text-[#C84B31]">
+            {alerts.filter((a) => a.severity === TyreStatus.CRITICAL).length} Critical
+          </span>
+        )}
+      </div>
+      {alerts.length === 0 ? (
+        <p className="text-[#6B8F7A] text-[12.5px] py-1">
+          Tidak ada anomali tekanan atau degradasi terdeteksi pada ban ini.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {alerts.map((alert) => (
+            <SmartAlertCard key={alert.id} alert={alert} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────
@@ -191,12 +286,27 @@ function TruckLayoutDiagram({ tyres, selectedId, onSelect }) {
 // SENSOR ROW — satu baris pembacaan sensor dengan bar
 // ─────────────────────────────────────────────
 
-function SensorRow({ label, value, pct, status }) {
-  const meta = STATUS_META[status];
+function IconInfo({ className }) {
   return (
-    <div>
+    <svg className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="8" cy="8" r="6.3" stroke="currentColor" strokeWidth="1.4" />
+      <line x1="8" y1="7.2" x2="8" y2="11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="8" cy="5" r="0.9" fill="currentColor" />
+    </svg>
+  );
+}
+
+function SensorRow({ label, value, pct, status, onClick }) {
+  const meta = STATUS_META[status];
+  const isClickable = typeof onClick === "function";
+
+  const content = (
+    <>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[#6B8F7A] text-[11.5px] font-medium">{label}</span>
+        <span className="flex items-center gap-1.5 text-[#6B8F7A] text-[11.5px] font-medium">
+          {label}
+          {isClickable && <IconInfo className="w-3 h-3 text-[#8FA89A]" />}
+        </span>
         <span className="text-[#0B3B2D] text-[13px] font-bold">{value}</span>
       </div>
       <div className="h-1.5 w-full bg-[#EDF3EF] rounded-full overflow-hidden">
@@ -204,6 +314,189 @@ function SensorRow({ label, value, pct, status }) {
           className="h-full rounded-full"
           style={{ width: `${Math.max(4, Math.min(100, pct))}%`, backgroundColor: meta.solid }}
         />
+      </div>
+    </>
+  );
+
+  if (!isClickable) {
+    return <div>{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left rounded-lg py-1 hover:bg-[#F4F7F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A7A4A]"
+      aria-haspopup="dialog"
+    >
+      {content}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────
+// POPUP VALIDITAS DATA — Degradasi Material
+// Menampilkan pipeline: sensor EIS mentah -> DI_EIS -> estimasi AI,
+// supaya angka materialDegradationPct bisa ditelusuri validitasnya.
+// ─────────────────────────────────────────────
+
+// Posisi marker pada skala log R_ct (0% = Baru/1000Ω, 100% = EOL/10Ω)
+function RctScale({ rCtOhm }) {
+  const pct = hitungDIEIS(rCtOhm); // 0-100, dipakai murni sebagai posisi visual
+  return (
+    <div>
+      <div className="relative h-2.5 w-full rounded-full overflow-hidden bg-gradient-to-r from-[#1A7A4A] via-[#E0A526] to-[#C84B31]">
+        <div
+          className="absolute top-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0B3B2D] shadow"
+          style={{ left: `${Math.max(1.5, Math.min(98.5, pct))}%`, transform: "translate(-50%, -50%)" }}
+        />
+      </div>
+      <div className="flex items-center justify-between mt-1.5">
+        <span className="text-[#8FA89A] text-[10px] font-medium">Baru · 1000 Ω</span>
+        <span className="text-[#8FA89A] text-[10px] font-medium">End of Life · 10 Ω</span>
+      </div>
+    </div>
+  );
+}
+
+function DegradationValidityModal({ tyre, onClose }) {
+  const sensor = tyre.eisSensor;
+
+  if (!sensor) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        role="dialog"
+        aria-modal="true"
+        onClick={onClose}
+      >
+        <div className="bg-white rounded-2xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+          <p className="text-[#0B3B2D] text-sm">Data sensor EIS mentah belum tersedia untuk ban ini.</p>
+          <button
+            onClick={onClose}
+            className="mt-4 px-4 py-2 rounded-xl bg-[#0B3B2D] text-white text-[13px] font-semibold"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { prediksiDegradasiPct } = estimasiDegradasi(sensor.rCtOhm, sensor.nilaiN);
+  const selisih = Math.round((prediksiDegradasiPct - tyre.materialDegradationPct) * 100) / 100;
+  const konsisten = Math.abs(selisih) <= 2;
+  const dStatus = degradationStatus(tyre.materialDegradationPct);
+  const meta = STATUS_META[dStatus];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="degradation-modal-title"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 p-5 border-b border-[#EEF3F0]">
+          <div>
+            <p className="text-[#6B8F7A] text-[10.5px] font-semibold uppercase tracking-[0.08em] mb-1">
+              Validitas Data — Degradasi Material
+            </p>
+            <h3 id="degradation-modal-title" className="text-[#0B3B2D] text-base font-bold tracking-tight">
+              Ban {tyre.id} · {tyre.position}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Tutup"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-[#8FA89A] hover:bg-[#F4F7F5] hover:text-[#0B3B2D] flex-shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-5">
+          {/* Angka utama + cross-check AI dalam satu blok */}
+          <div className="rounded-xl p-4" style={{ backgroundColor: meta.soft }}>
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: meta.text }}>
+                  Nilai di Dashboard
+                </p>
+                <p className="text-3xl font-bold leading-none" style={{ color: meta.text }}>
+                  {tyre.materialDegradationPct}%
+                </p>
+              </div>
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/70 flex-shrink-0"
+                title="Dihitung dari estimasi model AI berbasis sensor EIS"
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: konsisten ? "#1A7A4A" : "#B8790E" }}
+                />
+                <span className="text-[10.5px] font-bold" style={{ color: konsisten ? "#1A7A4A" : "#B8790E" }}>
+                  AI: {prediksiDegradasiPct}% ({selisih > 0 ? "+" : ""}
+                  {selisih})
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px]" style={{ color: meta.text }}>
+              {konsisten
+                ? "Konsisten — nilai dashboard cocok dengan estimasi model dari sensor mentah."
+                : "Ada selisih dengan estimasi model, perlu ditinjau."}
+            </p>
+          </div>
+
+          {/* Posisi pada skala sensor */}
+          <div>
+            <p className="text-[#6B8F7A] text-[10.5px] font-semibold uppercase tracking-[0.06em] mb-2">
+              Posisi Sensor (R_ct)
+            </p>
+            <RctScale rCtOhm={sensor.rCtOhm} />
+          </div>
+
+          {/* Sensor mentah — chip compact */}
+          <div className="flex gap-2.5">
+            <div className="flex-1 rounded-xl bg-[#F4F7F5] px-3.5 py-2.5">
+              <p className="text-[#0B3B2D] text-sm font-bold leading-none">{sensor.rCtOhm} Ω</p>
+              <p className="text-[#8FA89A] text-[10px] mt-1">R_ct terukur</p>
+            </div>
+            <div className="flex-1 rounded-xl bg-[#F4F7F5] px-3.5 py-2.5">
+              <p className="text-[#0B3B2D] text-sm font-bold leading-none">{sensor.nilaiN}</p>
+              <p className="text-[#8FA89A] text-[10px] mt-1">nilai_n (CPE)</p>
+            </div>
+          </div>
+
+          {/* Metodologi — collapsible, default tertutup */}
+          <details className="group rounded-xl border border-[#EEF3F0] open:bg-[#FDF3E0]/40">
+            <summary className="list-none flex items-center justify-between px-3.5 py-2.5 cursor-pointer select-none">
+              <span className="text-[#6B8F7A] text-[11px] font-semibold">Tentang metodologi & akurasi model</span>
+              <span className="text-[#8FA89A] text-[11px] group-open:rotate-180 transition-transform duration-150">
+                ▾
+              </span>
+            </summary>
+            <div className="px-3.5 pb-3.5 pt-1">
+              <div className="flex gap-4 mb-2">
+                <p className="text-[#0B3B2D] text-[11.5px]">
+                  MAE <strong>{MODEL_META.maePoinPersen}</strong> poin
+                </p>
+                <p className="text-[#0B3B2D] text-[11.5px]">
+                  R² <strong>{MODEL_META.r2}</strong>
+                </p>
+              </div>
+              <p className="text-[#8FA89A] text-[10.5px] leading-relaxed">{MODEL_META.catatanValiditas}</p>
+              <p className="text-[#8FA89A] text-[10.5px] leading-relaxed mt-1.5">
+                Data pelatihan: {MODEL_META.dataLatih}.
+              </p>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
   );
@@ -213,9 +506,7 @@ function SensorRow({ label, value, pct, status }) {
 // DETAIL PANEL — ban yang sedang dipilih
 // ─────────────────────────────────────────────
 
-function TyreDetailPanel({ tyre }) {
-  const rulDays = Math.round(tyre.remainingUsefulLifeHours / 24);
-
+function TyreDetailPanel({ tyre, onOpenDegradationValidity }) {
   return (
     <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
       <div className="flex items-start justify-between gap-3 mb-5">
@@ -232,7 +523,8 @@ function TyreDetailPanel({ tyre }) {
         <CircularScoreGauge score={tyre.healthScore} size={92} strokeWidth={10} />
         <div>
           <p className="text-[#0B3B2D] text-2xl font-bold leading-none">
-            {rulDays} <span className="text-sm font-medium text-[#6B8F7A]">hari</span>
+            {tyre.remainingUsefulLifeKm.toLocaleString("id-ID")}{" "}
+            <span className="text-sm font-medium text-[#6B8F7A]">km</span>
           </p>
           <p className="text-[#6B8F7A] text-[11px] mt-1.5">Remaining Useful Life</p>
         </div>
@@ -256,6 +548,7 @@ function TyreDetailPanel({ tyre }) {
           value={`${tyre.materialDegradationPct}%`}
           pct={tyre.materialDegradationPct}
           status={degradationStatus(tyre.materialDegradationPct)}
+          onClick={() => onOpenDegradationValidity(tyre)}
         />
       </div>
     </div>
@@ -267,8 +560,6 @@ function TyreDetailPanel({ tyre }) {
 // ─────────────────────────────────────────────
 
 function TyreListRow({ tyre, isSelected, onSelect }) {
-  const rulDays = Math.round(tyre.remainingUsefulLifeHours / 24);
-
   return (
     <button
       onClick={() => onSelect(tyre.id)}
@@ -288,7 +579,8 @@ function TyreListRow({ tyre, isSelected, onSelect }) {
             {tyre.id} · {tyre.position}
           </p>
           <p className="text-[#6B8F7A] text-[11px] mt-0.5 truncate">
-            RUL {rulDays} hari · {tyre.pressurePsi} PSI · {tyre.temperatureCelcius}°C
+            RUL {tyre.remainingUsefulLifeKm.toLocaleString("id-ID")} km · {tyre.pressurePsi} PSI ·{" "}
+            {tyre.temperatureCelcius}°C
           </p>
         </div>
       </div>
@@ -313,6 +605,7 @@ export default function TyreMonitoring() {
   );
 
   const [selectedId, setSelectedId] = useState(mostCriticalTyre?.id ?? null);
+  const [validityTyre, setValidityTyre] = useState(null);
 
   if (!unit || unit.tyres.length === 0) {
     return (
@@ -357,25 +650,18 @@ export default function TyreMonitoring() {
           </div>
         </div>
 
-        <TyreDetailPanel tyre={selectedTyre} />
+        <TyreDetailPanel
+          tyre={selectedTyre}
+          onOpenDegradationValidity={setValidityTyre}
+        />
       </div>
 
-      {/* ── DAFTAR SEMUA BAN ── */}
-      <div className="bg-white rounded-2xl border border-[#E8EDE9] p-5 shadow-sm">
-        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-2 px-1">
-          Semua Ban — {unit.unitId}
-        </p>
-        <div className="flex flex-col divide-y divide-[#EEF3F0]">
-          {unit.tyres.map((tyre) => (
-            <TyreListRow
-              key={tyre.id}
-              tyre={tyre}
-              isSelected={tyre.id === selectedTyre.id}
-              onSelect={setSelectedId}
-            />
-          ))}
-        </div>
-      </div>
+      {/* ── SMART ALERTS — kontekstual sesuai ban terpilih ── */}
+      <TyreSmartAlerts tyre={selectedTyre} />
+
+      {validityTyre && (
+        <DegradationValidityModal tyre={validityTyre} onClose={() => setValidityTyre(null)} />
+      )}
     </div>
   );
 }

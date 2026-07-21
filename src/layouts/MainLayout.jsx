@@ -4,8 +4,6 @@ import TyreMonitoring from "../features/tyre-monitoring/TyreMonitoring";
 import AiInsight from "../features/ai-insight/AiInsight";
 import RoadIntelligence from "../features/road/RoadIntelligence";
 import Operator from "../features/operator/Operator";
-import Alerts from "../features/alerts/Alerts";
-import Maintenance from "../features/maintenance/Maintenance";
 import Reports from "../features/reports/Reports";
 import logoTyreMind from "../assets/logo_tyremind.png";
 
@@ -121,18 +119,6 @@ const NAV_ITEMS = [
     id: "operator",
     label: "Operator",
     icon: IconOperator,
-    badge: null,
-  },
-  {
-    id: "alerts",
-    label: "Alerts",
-    icon: IconAlerts,
-    badge: null, 
-  },
-  {
-    id: "maintenance",
-    label: "Maintenance",
-    icon: IconMaintenance,
     badge: null,
   },
   {
@@ -303,9 +289,6 @@ function TopBar({ activeMenu }) {
         <h1 className="text-[#0B3B2D] text-lg font-bold tracking-tight leading-tight">
           {item?.label}
         </h1>
-        <p className="text-[#6B8F7A] text-[11.5px] mt-0.5 leading-none">
-          Real Data. Real Insight. Real Impact.
-        </p>
       </div>
 
       {/* Right cluster */}
@@ -362,8 +345,6 @@ export default function MainLayout() {
           {activeMenu === "ai-insight" && <AiInsight />}
           {activeMenu === "road" && <RoadIntelligence />}
           {activeMenu === "operator" && <Operator />}
-          {activeMenu === "alerts" && <Alerts />}
-          {activeMenu === "maintenance" && <Maintenance />}
           {activeMenu === "reports" && <Reports />}
         </main>
       </div>

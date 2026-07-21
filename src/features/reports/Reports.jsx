@@ -5,8 +5,12 @@
  * Tiga bagian:
  *   1. Export Laporan — simulasi ekspor Laporan Harian, Mingguan, dan
  *      Prediksi AI ke format PDF / Excel.
- *   2. Pengaturan Konektivitas IoT LoRa — konfigurasi gateway sederhana
- *      (lokal, belum tersambung backend).
+ *   2. Status Konektivitas IoT LoRa — read-only, menampilkan status
+ *      seluruh gateway di site (bisa lebih dari 1, untuk redundansi
+ *      jangkauan). Frekuensi & gateway ID BUKAN form yang bisa diedit
+ *      dispatcher — itu konfigurasi jaringan level instalasi.
+ *   4. Integrasi Data Payload (OBW/PLM) — transparansi sumber data
+ *      payload, terpisah dari sensor ban.
  *   3. Status Baterai Sensor — level baterai sensor tiap ban unit DT001.
  *
  * Catatan implementasi:
@@ -21,7 +25,7 @@
  */
 
 import { useState } from "react";
-import { fleet } from "../../services/tyreData";
+import { fleet, loraNetwork, GatewayStatus } from "../../services/tyreData";
 
 // ─────────────────────────────────────────────
 // KONFIGURASI JENIS LAPORAN
@@ -125,79 +129,123 @@ function ReportExportCard({ reportType, exportStatus, onExport }) {
 }
 
 // ─────────────────────────────────────────────
-// PENGATURAN KONEKTIVITAS IOT LoRa
+// STATUS KONEKTIVITAS IoT LoRa — read-only, mendukung banyak gateway
+// (bukan form pengaturan; frekuensi & gateway ID bukan sesuatu yang
+// diedit dispatcher — itu ditentukan saat instalasi/regulasi negara)
 // ─────────────────────────────────────────────
 
-function LoraSettingsCard() {
-  const [connected, setConnected] = useState(true);
-  const [gatewayId, setGatewayId] = useState("GW-TYREMIND-01");
-  const [frequency, setFrequency] = useState("923 MHz (AS923)");
-  const [saved, setSaved] = useState(false);
+function GatewayRow({ gateway }) {
+  const isOnline = gateway.status === GatewayStatus.ONLINE;
+  return (
+    <div className="flex items-center justify-between gap-3 py-3 border-b border-[#EEF3F0] last:border-b-0">
+      <div className="min-w-0">
+        <p className="text-[#0B3B2D] text-[13px] font-semibold leading-tight">{gateway.id}</p>
+        <p className="text-[#8FA89A] text-[10.5px] mt-0.5 truncate">{gateway.location}</p>
+      </div>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="text-right">
+          <p className="text-[#0B3B2D] text-[12px] font-bold">{gateway.devicesInRange} alat</p>
+          <p className="text-[#8FA89A] text-[10px]">{gateway.lastSyncLabel}</p>
+        </div>
+        <span
+          className="text-[10.5px] font-bold px-2.5 py-1 rounded-full"
+          style={{
+            backgroundColor: isOnline ? "#E8F5EE" : "#FBEAE6",
+            color: isOnline ? "#1A7A4A" : "#C84B31",
+          }}
+        >
+          {isOnline ? "Online" : "Offline"}
+        </span>
+      </div>
+    </div>
+  );
+}
 
-  function handleSave(e) {
-    e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
+function LoraStatusCard() {
+  const onlineCount = loraNetwork.gateways.filter((g) => g.status === GatewayStatus.ONLINE).length;
+  const totalCount = loraNetwork.gateways.length;
+  const allOnline = onlineCount === totalCount;
 
   return (
     <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-1">
         <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em]">
           Konektivitas IoT LoRa
         </p>
         <span
           className="text-[11px] font-bold px-2.5 py-1 rounded-full"
           style={{
-            backgroundColor: connected ? "#E8F5EE" : "#FBEAE6",
-            color: connected ? "#1A7A4A" : "#C84B31",
+            backgroundColor: allOnline ? "#E8F5EE" : "#FDF3E0",
+            color: allOnline ? "#1A7A4A" : "#B8790E",
           }}
         >
-          {connected ? "Gateway Terhubung" : "Gateway Terputus"}
+          {onlineCount}/{totalCount} Gateway Online
+        </span>
+      </div>
+      <p className="text-[#8FA89A] text-[10.5px] mb-4">
+        Infrastruktur radio milik site {loraNetwork.siteName} · Frekuensi {loraNetwork.frequencyBand}
+      </p>
+
+      <div className="rounded-xl bg-[#F4F7F5] px-4">
+        {loraNetwork.gateways.map((gw) => (
+          <GatewayRow key={gw.id} gateway={gw} />
+        ))}
+      </div>
+
+      <p className="text-[#8FA89A] text-[10px] mt-3">
+        Sensor terhubung ke gateway manapun yang jangkauannya tersedia — data tetap sampai walau salah
+        satu gateway offline. Konfigurasi jaringan dikelola dari sisi instalasi, bukan dari halaman ini.
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// INTEGRASI PAYLOAD — OBW / Payload Meter (PLM) via LoRa
+// ─────────────────────────────────────────────
+
+function PayloadIntegrationCard({ unit }) {
+  const metrics = unit.operationalMetrics;
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em]">
+          Integrasi Data Payload (OBW / PLM)
+        </p>
+        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#E8F5EE] text-[#1A7A4A]">
+          Tersambung
         </span>
       </div>
 
-      <form onSubmit={handleSave} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[#6B8F7A] text-[11px] font-semibold">Gateway ID</span>
-          <input
-            type="text"
-            value={gatewayId}
-            onChange={(e) => setGatewayId(e.target.value)}
-            className="rounded-xl border border-[#E8EDE9] px-3 py-2 text-[13px] text-[#0B3B2D] focus:outline-none focus:ring-2 focus:ring-[#1A7A4A]"
-          />
-        </label>
+      <p className="text-[#6B8F7A] text-[11.5px] leading-relaxed mb-4">
+        Data payload <strong>bukan</strong> berasal dari sensor ban TyreMind. Sensor ban hanya membaca
+        tekanan, suhu, dan degradasi material. Berat muatan dibaca dari sistem On-Board Weighing /
+        Payload Meter bawaan unit, lalu diteruskan ke TyreMind melalui gateway LoRa yang sama.
+      </p>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[#6B8F7A] text-[11px] font-semibold">Frekuensi Jaringan</span>
-          <select
-            value={frequency}
-            onChange={(e) => setFrequency(e.target.value)}
-            className="rounded-xl border border-[#E8EDE9] px-3 py-2 text-[13px] text-[#0B3B2D] focus:outline-none focus:ring-2 focus:ring-[#1A7A4A] bg-white"
-          >
-            <option>923 MHz (AS923)</option>
-            <option>868 MHz (EU868)</option>
-            <option>915 MHz (US915)</option>
-          </select>
-        </label>
-
-        <label className="flex items-center gap-2.5">
-          <input
-            type="checkbox"
-            checked={connected}
-            onChange={(e) => setConnected(e.target.checked)}
-            className="w-4 h-4 rounded accent-[#1A7A4A]"
-          />
-          <span className="text-[#0B3B2D] text-[12.5px] font-medium">Aktifkan koneksi gateway</span>
-        </label>
-
-        <button
-          type="submit"
-          className="self-start px-5 py-2.5 rounded-xl bg-[#0B3B2D] text-white text-[13px] font-semibold hover:bg-[#14543A] transition-colors duration-150"
-        >
-          {saved ? "Tersimpan ✓" : "Simpan Pengaturan"}
-        </button>
-      </form>
+      <div className="rounded-xl bg-[#F4F7F5] p-4 flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[#6B8F7A] text-[11px] font-semibold">Sumber Data</span>
+          <span className="text-[#0B3B2D] text-[12.5px] font-bold text-right">{metrics.payloadDataSource}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[#6B8F7A] text-[11px] font-semibold">Jalur Integrasi</span>
+          <span className="text-[#0B3B2D] text-[12px] font-medium text-right">{metrics.payloadIntegrationPath}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[#6B8F7A] text-[11px] font-semibold">Sensor ID</span>
+          <span className="text-[#0B3B2D] text-[12.5px] font-bold">{metrics.payloadSensorId}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[#6B8F7A] text-[11px] font-semibold">LoRa Gateway</span>
+          <span className="text-[#0B3B2D] text-[12.5px] font-bold">{metrics.payloadGatewayId}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#E8EDE9]">
+          <span className="text-[#6B8F7A] text-[11px] font-semibold">Sinkronisasi Terakhir</span>
+          <span className="text-[#1A7A4A] text-[12px] font-bold">{metrics.lastPayloadSyncLabel}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -242,9 +290,6 @@ function SensorBatteryCard({ tyres }) {
     <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
       <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-1">
         Status Baterai Sensor Ban
-      </p>
-      <p className="text-[#8FA89A] text-[10.5px] mb-3">
-        Placeholder — akan diganti data IoT LoRa real-time begitu gateway terhubung.
       </p>
       <div className="flex flex-col">
         {tyres.map((tyre, index) => (
@@ -303,10 +348,11 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* ── IOT LoRa + BATERAI SENSOR ── */}
+      {/* ── IOT LoRa + BATERAI SENSOR + INTEGRASI PAYLOAD ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-        <LoraSettingsCard />
+        <LoraStatusCard />
         {unit && <SensorBatteryCard tyres={unit.tyres} />}
+        {unit && <PayloadIntegrationCard unit={unit} />}
       </div>
     </div>
   );

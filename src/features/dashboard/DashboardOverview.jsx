@@ -65,9 +65,13 @@ function computeFleetMetrics(fleetData) {
       )
     : 0;
 
-  const minRULHours = totalTyres
-    ? Math.min(...allTyres.map((t) => t.remainingUsefulLifeHours))
-    : 0;
+  const minRULTyre = totalTyres
+    ? allTyres.reduce((min, t) =>
+        !min || t.remainingUsefulLifeKm < min.remainingUsefulLifeKm ? t : min,
+        null
+      )
+    : null;
+  const minRULKm = minRULTyre?.remainingUsefulLifeKm ?? 0;
 
   const alertCounts = allTyres.reduce(
     (acc, t) => {
@@ -98,7 +102,8 @@ function computeFleetMetrics(fleetData) {
     totalTyres,
     activeVehicles,
     avgHealthScore,
-    minRULDays: Math.round(minRULHours / 24),
+    minRULKm,
+    minRULTyre,
     alertCounts,
     fleetAvailabilityPct,
     availableUnits,
@@ -250,7 +255,7 @@ function TopRiskTyres({ tyres }) {
               {tyre.id}
             </p>
             <p className="text-[#6B8F7A] text-[11px] mt-0.5">
-              RUL {Math.round(tyre.remainingUsefulLifeHours / 24)} hari · {tyre.unitId} · {tyre.position}
+              RUL {tyre.remainingUsefulLifeKm.toLocaleString("id-ID")} km · {tyre.unitId} · {tyre.position}
             </p>
           </div>
           <StatusPill status={tyre.status} className="flex-shrink-0 ml-3" />
@@ -265,9 +270,7 @@ function TopRiskTyres({ tyres }) {
 // ─────────────────────────────────────────────
 
 function UnitStatusCard({ unit }) {
-  const rulDays = Math.round(
-    Math.min(...unit.tyres.map((t) => t.remainingUsefulLifeHours)) / 24
-  );
+  const rulKm = Math.min(...unit.tyres.map((t) => t.remainingUsefulLifeKm));
   const initials = unit.operator
     .split(" ")
     .map((n) => n[0])
@@ -300,8 +303,8 @@ function UnitStatusCard({ unit }) {
         </div>
         <div>
           <p className="text-[#0B3B2D] text-2xl font-bold leading-none">
-            {rulDays}
-            <span className="text-sm font-medium text-[#6B8F7A]"> hari</span>
+            {rulKm.toLocaleString("id-ID")}
+            <span className="text-sm font-medium text-[#6B8F7A]"> km</span>
           </p>
           <p className="text-[#6B8F7A] text-[10.5px] mt-1.5">Remaining Useful Life</p>
         </div>
@@ -346,7 +349,8 @@ export default function DashboardOverview() {
     totalTyres,
     activeVehicles,
     avgHealthScore,
-    minRULDays,
+    minRULKm,
+    minRULTyre,
     alertCounts,
     fleetAvailabilityPct,
     availableUnits,
@@ -402,14 +406,17 @@ export default function DashboardOverview() {
         <MetricCard label="Remaining Useful Life">
           <div className="flex items-end gap-1.5 mb-3">
             <span className="text-[#0B3B2D] text-3xl font-bold tracking-tight">
-              {minRULDays}
+              {minRULKm.toLocaleString("id-ID")}
             </span>
-            <span className="text-[#6B8F7A] text-xs font-medium mb-1">Days</span>
+            <span className="text-[#6B8F7A] text-xs font-medium mb-1">KM</span>
           </div>
           <div className="h-1.5 w-full bg-[#EDF3EF] rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#1A7A4A] rounded-full"
-              style={{ width: `${Math.min(100, (minRULDays / 60) * 100)}%` }}
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.min(100, (minRULKm / 5000) * 100)}%`,
+                backgroundColor: STATUS_META[minRULTyre?.status ?? TyreStatus.NORMAL].solid,
+              }}
             />
           </div>
           <p className="text-[#6B8F7A] text-[10.5px] mt-2">Ban dengan sisa umur terendah</p>
