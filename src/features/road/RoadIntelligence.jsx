@@ -18,7 +18,8 @@
  */
 
 import { useState } from "react";
-import { fleet, roadSegments, RoadSegmentRisk } from "../../services/tyreData";
+import { fleet, roadSegments, payloadCycles, RoadSegmentRisk } from "../../services/tyreData";
+import { analyzeCycleTimeForCycles, CYCLE_STAGES } from "../../services/payloadModel";
 
 // ─────────────────────────────────────────────
 // THEME — skor TINGGI = BERBAHAYA (merah)
@@ -31,6 +32,16 @@ const ROAD_RISK_META = {
 };
 
 const UNTRAVELED_COLOR = "#C7D2CB";
+
+// Palet warna per tahap cycle time — urut sesuai CYCLE_STAGES di payloadModel.js
+const STAGE_COLORS = {
+  queueMinutes: "#C84B31",
+  spottingMinutes: "#E0A526",
+  loadingMinutes: "#3B82C4",
+  haulingLoadedMinutes: "#0B3B2D",
+  dumpingMinutes: "#8B5CF6",
+  returnEmptyMinutes: "#1A7A4A",
+};
 
 // ─────────────────────────────────────────────
 // UI PRIMITIVES
@@ -430,6 +441,175 @@ function HaulRoadMap({ segments, selectedId, onSelect }) {
 }
 
 // ─────────────────────────────────────────────
+// CYCLE TIME HAULER — waktu edar 1 ritase, 6 tahapan
+// ─────────────────────────────────────────────
+
+function CycleTimeKpi({ label, value, unit, sub, tone = "default" }) {
+  const toneColor = tone === "bad" ? "#C84B31" : tone === "good" ? "#1A7A4A" : "#0B3B2D";
+  return (
+    <div className="bg-white rounded-2xl border border-[#E8EDE9] p-5 shadow-sm">
+      <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-2">{label}</p>
+      <p className="text-2xl font-bold tracking-tight leading-none" style={{ color: toneColor }}>
+        {value}
+        {unit && <span className="text-[13px] font-semibold text-[#8FA89A] ml-1">{unit}</span>}
+      </p>
+      {sub && <p className="text-[#6B8F7A] text-[10.5px] mt-1.5">{sub}</p>}
+    </div>
+  );
+}
+
+function StageStackedBar({ avgStageMinutes, totalMinutes, height = 34 }) {
+  return (
+    <div>
+      <div className="w-full flex rounded-lg overflow-hidden" style={{ height }}>
+        {avgStageMinutes.map((stage) => {
+          const widthPct = totalMinutes > 0 ? (stage.avgActualMinutes / totalMinutes) * 100 : 0;
+          return (
+            <div
+              key={stage.key}
+              style={{ width: `${widthPct}%`, backgroundColor: STAGE_COLORS[stage.key] }}
+              className="h-full flex items-center justify-center transition-all duration-200"
+              title={`${stage.label}: ${stage.avgActualMinutes} min`}
+            >
+              {widthPct > 9 && (
+                <span className="text-white text-[9.5px] font-bold leading-none px-0.5 truncate">
+                  {stage.avgActualMinutes}m
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+        {avgStageMinutes.map((stage) => (
+          <span key={stage.key} className="flex items-center gap-1.5 text-[10.5px] text-[#6B8F7A] font-medium">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STAGE_COLORS[stage.key] }} />
+            {stage.shortLabel}
+            <span
+              className="font-semibold"
+              style={{ color: stage.deviationMinutes > 0.4 ? "#C84B31" : "#8FA89A" }}
+            >
+              {stage.avgActualMinutes}m
+              {stage.deviationMinutes > 0.4 ? ` (+${stage.deviationMinutes})` : ""}
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CycleTimeRow({ cycle }) {
+  const meta = { solid: STAGE_COLORS[cycle.bottleneckStage.key] };
+  const isOverTarget = cycle.deviationMinutes > 0;
+  return (
+    <div className="w-full rounded-xl py-2.5 px-3 flex items-center justify-between gap-3 hover:bg-[#F4F7F5] transition-colors duration-150">
+      <div className="min-w-0">
+        <p className="text-[#0B3B2D] text-[12.5px] font-semibold leading-tight">
+          {cycle.cycleId} <span className="text-[#8FA89A] font-medium">· {cycle.timeLabel}</span>
+        </p>
+        <p className="text-[11px] leading-tight mt-0.5" style={{ color: meta.solid }}>
+          Bottleneck: {cycle.bottleneckStage.shortLabel}
+        </p>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <p className="text-[#0B3B2D] text-[12.5px] font-bold leading-tight">{cycle.totalMinutes} min</p>
+        <p className="text-[10.5px] leading-tight" style={{ color: isOverTarget ? "#C84B31" : "#1A7A4A" }}>
+          {isOverTarget ? "+" : ""}
+          {cycle.deviationMinutes} min vs target
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CycleTimeSection({ cycles }) {
+  if (!cycles?.length) return null;
+  const analysis = analyzeCycleTimeForCycles(cycles);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="bg-white rounded-2xl border border-[#E8EDE9] p-5 shadow-sm">
+        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-1">
+          Management Cycle Time Hauler
+        </p>
+        <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">Waktu Edar 1 Ritase (Round Trip)</h2>
+        <p className="text-[#6B8F7A] text-[12px] mt-1">
+          Queue → Spotting → Loading → Hauling (Loaded) → Dumping → Return (Empty). Dibandingkan dengan target
+          waktu per tahap untuk mengidentifikasi bottleneck.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <CycleTimeKpi
+          label="Avg. Cycle Time"
+          value={analysis.avgTotalMinutes}
+          unit="min"
+          sub={`target ${analysis.targetTotalMinutes} min`}
+          tone={analysis.avgDeviationMinutes > 0 ? "bad" : "good"}
+        />
+        <CycleTimeKpi
+          label="Deviasi vs Target"
+          value={`${analysis.avgDeviationMinutes > 0 ? "+" : ""}${analysis.avgDeviationMinutes}`}
+          unit="min"
+          sub="rata-rata per ritase"
+          tone={analysis.avgDeviationMinutes > 0 ? "bad" : "good"}
+        />
+        <CycleTimeKpi
+          label="Bottleneck Tersering"
+          value={analysis.mostFrequentBottleneck?.shortLabel ?? "-"}
+          sub={
+            analysis.mostFrequentBottleneck
+              ? `+${analysis.mostFrequentBottleneck.deviationMinutes} min vs target`
+              : ""
+          }
+          tone="bad"
+        />
+        <CycleTimeKpi
+          label="Potensi Ritase/Shift"
+          value={`+${Math.max(0, analysis.potentialExtraTripsPerShift)}`}
+          unit="trip"
+          sub={`bila cycle time ditekan ke target`}
+          tone="good"
+        />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
+        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-3">
+          Rata-rata Waktu per Tahap — Hari Ini
+        </p>
+        <StageStackedBar avgStageMinutes={analysis.avgStageMinutes} totalMinutes={analysis.avgTotalMinutes} />
+        <p className="text-[#8FA89A] text-[10px] mt-3">
+          Angka merah = tahap ini melebihi target rata-rata &gt;0.4 menit. Hauling (Loaded) diturunkan dari rute
+          ~12 km & profil kecepatan yang sama dengan modul Operator.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
+        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-3">
+          Detail Waktu Edar per Ritase ({analysis.totalCycles})
+        </p>
+        <div className="flex flex-col gap-1">
+          {analysis.perCycle.map((cycle) => (
+            <CycleTimeRow key={cycle.cycleId} cycle={cycle} />
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-[#FDF3E0] px-4 py-3">
+        <p className="text-[#B8790E] text-[11px] font-bold">Catatan metodologi</p>
+        <p className="text-[#B8790E]/90 text-[10.5px] mt-1 leading-snug">
+          Target waktu per tahap adalah asumsi ilustratif berbasis rentang wajar operasi excavator-HD785, bukan
+          SOP/standard time resmi KPP. Potensi ritase tambahan per shift adalah proyeksi linear (asumsi shift{" "}
+          {analysis.shiftMinutes / 60} jam), belum memperhitungkan variasi antrian riil. Lihat
+          services/payloadModel.js untuk detail asumsi.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // ROAD INTELLIGENCE — root component
 // ─────────────────────────────────────────────
 
@@ -515,6 +695,9 @@ export default function RoadIntelligence() {
       {incidentSegment && (
         <IncidentListModal segment={incidentSegment} onClose={() => setIncidentSegment(null)} />
       )}
+
+      {/* ── MANAGEMENT CYCLE TIME HAULER ── */}
+      <CycleTimeSection cycles={payloadCycles} />
     </div>
   );
 }

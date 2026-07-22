@@ -70,7 +70,24 @@ const tyreRearRight = {
 export const unitDT001 = {
   unitId: "DT001",
   name: "Dump Truck",
-  type: "OTR Mining Truck",
+  type: "Komatsu HD785-7",
+  // Rated payload PABRIKAN (bukan asumsi) — 91.7 ton metrik, dibulatkan ke
+  // 91 ton untuk kalkulasi. Sumber: spesifikasi resmi Komatsu HD785-7
+  // (rigid dump truck, rated payload 91.7 t / dump body 40 yd³ struck).
+  // Dipakai sebagai basis Payload Utilization di services/payloadModel.js.
+  ratedPayloadTon: 91,
+  // Berat kosong unit (unloaded) — spesifikasi resmi Komatsu HD785-7: 72.6 ton.
+  // Dipakai bersama ratedPayloadTon untuk menghitung Gross Vehicle Weight
+  // (GVW) per kondisi loaded/empty di TKPH — lihat services/maintenanceModel.js.
+  emptyWeightTon: 72.6,
+  // HD785-7 punya 6 posisi ban fisik (2 depan + 4 belakang dual), TAPI
+  // tyreData.js MVP ini hanya memodelkan 4 TITIK monitoring (tyres di
+  // bawah) — sisi belakang kiri/kanan mewakili sepasang dual masing-masing.
+  // physicalTyreCount dipisah dari tyres.length supaya kalkulasi TKPH/beban
+  // per ban (di maintenanceModel.js) memakai jumlah ban FISIK yang benar,
+  // bukan jumlah titik monitoring.
+  physicalTyreCount: 6,
+  tyreSize: "27.00R49", // ukuran ban standar pabrikan HD785-7
   site: "Main Haul Road",
   segment: "A",
   operator: "Satrio Adhiyatma",
@@ -137,6 +154,73 @@ export function estimateTyreRulDays(tyre, unit) {
   const dailyKm = unit?.operationalMetrics?.averageDailyDistanceKm || 1;
   return Math.round(tyre.remainingUsefulLifeKm / dailyKm);
 }
+
+// ─────────────────────────────────────────────
+// PAYLOAD HAULER — data ritase (loading cycle) unit DT001 (HD785-7)
+// pada rute Hauling KM 33 → Port.
+//
+// Setiap objek = 1 kali ritase (1 siklus muat-angkut-bongkar), dicatat
+// dari Payload Meter (PLM) + timestamp event dispatch/FMS bawaan unit —
+// sama sumbernya dengan operationalMetrics.payloadDataSource di atas,
+// BUKAN sensor tambahan.
+//
+// cycleTimeBreakdown memecah waktu edar (round trip) 1 ritase HD785
+// menjadi 6 tahapan standar operasi hauling:
+//   1. queueMinutes            — antre di area front loading (KM 33)
+//   2. spottingMinutes         — manuver ambil posisi di bawah excavator
+//   3. loadingMinutes          — proses pengisian muatan oleh excavator
+//   4. haulingLoadedMinutes    — tempuh bermuatan KM 33 → Port
+//   5. dumpingMinutes          — manuver & bongkar muatan di Port
+//   6. returnEmptyMinutes      — tempuh kosong Port → KM 33
+// Jumlah ke-6nya = total waktu edar 1 ritase.
+//
+// haulingLoadedMinutes diturunkan dari rute ~12 km & profil kecepatan
+// yang SAMA dengan driverBehavior.speedProfile di bawah (rata-rata
+// ±27 km/h) — supaya konsisten dengan modul Operator. returnEmptyMinutes
+// diasumsikan ~35% lebih cepat dari haulingLoaded (unit tanpa beban),
+// dan durasi queue/spotting/loading/dumping mengikuti rentang wajar
+// operasi excavator-HD785, BUKAN dari sistem timestamp sungguhan situs
+// KPP — lihat catatan asumsi lengkap di services/payloadModel.js.
+//
+// Data 12 ritase (~1 shift) di bawah ini SINTETIS namun didesain untuk
+// merepresentasikan pola nyata di lapangan: sebagian underload (loading
+// operator terlalu hati-hati / bucket count kurang pas), sebagian pas
+// target, sebagian overload (bucket count berlebih). Rated payload
+// HD785-7 = 91 ton (lihat unitDT001.ratedPayloadTon).
+// ─────────────────────────────────────────────
+
+export const PayloadClass = Object.freeze({
+  UNDERLOAD: "Underload",
+  OPTIMAL: "Optimal",
+  OVERLOAD: "Overload",
+})
+
+export const payloadCycles = [
+  { cycleId: "RIT-01", timeLabel: "06:10", material: "Batubara ROM", loadedTon: 76,
+    cycleTimeBreakdown: { queueMinutes: 3.0, spottingMinutes: 1.5, loadingMinutes: 3.2, haulingLoadedMinutes: 25.0, dumpingMinutes: 1.3, returnEmptyMinutes: 18.0 } },
+  { cycleId: "RIT-02", timeLabel: "06:55", material: "Batubara ROM", loadedTon: 88,
+    cycleTimeBreakdown: { queueMinutes: 4.0, spottingMinutes: 1.4, loadingMinutes: 3.6, haulingLoadedMinutes: 26.0, dumpingMinutes: 1.4, returnEmptyMinutes: 18.5 } },
+  { cycleId: "RIT-03", timeLabel: "07:38", material: "Batubara ROM", loadedTon: 95,
+    cycleTimeBreakdown: { queueMinutes: 5.0, spottingMinutes: 1.6, loadingMinutes: 3.9, haulingLoadedMinutes: 27.0, dumpingMinutes: 1.5, returnEmptyMinutes: 19.0 } },
+  { cycleId: "RIT-04", timeLabel: "08:20", material: "Batubara ROM", loadedTon: 104,
+    cycleTimeBreakdown: { queueMinutes: 6.0, spottingMinutes: 2.0, loadingMinutes: 4.3, haulingLoadedMinutes: 28.5, dumpingMinutes: 1.8, returnEmptyMinutes: 19.5 } },
+  { cycleId: "RIT-05", timeLabel: "09:05", material: "Batubara ROM", loadedTon: 90,
+    cycleTimeBreakdown: { queueMinutes: 3.5, spottingMinutes: 1.5, loadingMinutes: 3.7, haulingLoadedMinutes: 26.0, dumpingMinutes: 1.4, returnEmptyMinutes: 18.5 } },
+  { cycleId: "RIT-06", timeLabel: "09:48", material: "Batubara ROM", loadedTon: 79,
+    cycleTimeBreakdown: { queueMinutes: 2.5, spottingMinutes: 1.3, loadingMinutes: 3.3, haulingLoadedMinutes: 25.0, dumpingMinutes: 1.3, returnEmptyMinutes: 18.0 } },
+  { cycleId: "RIT-07", timeLabel: "10:30", material: "Batubara ROM", loadedTon: 92,
+    cycleTimeBreakdown: { queueMinutes: 4.5, spottingMinutes: 1.5, loadingMinutes: 3.8, haulingLoadedMinutes: 26.5, dumpingMinutes: 1.5, returnEmptyMinutes: 18.8 } },
+  { cycleId: "RIT-08", timeLabel: "11:15", material: "Batubara ROM", loadedTon: 110,
+    cycleTimeBreakdown: { queueMinutes: 7.0, spottingMinutes: 2.2, loadingMinutes: 4.6, haulingLoadedMinutes: 29.0, dumpingMinutes: 2.0, returnEmptyMinutes: 20.0 } },
+  { cycleId: "RIT-09", timeLabel: "12:40", material: "Batubara ROM", loadedTon: 85,
+    cycleTimeBreakdown: { queueMinutes: 3.0, spottingMinutes: 1.4, loadingMinutes: 3.5, haulingLoadedMinutes: 25.5, dumpingMinutes: 1.4, returnEmptyMinutes: 18.2 } },
+  { cycleId: "RIT-10", timeLabel: "13:25", material: "Batubara ROM", loadedTon: 70,
+    cycleTimeBreakdown: { queueMinutes: 2.0, spottingMinutes: 1.2, loadingMinutes: 3.0, haulingLoadedMinutes: 24.5, dumpingMinutes: 1.2, returnEmptyMinutes: 17.5 } },
+  { cycleId: "RIT-11", timeLabel: "14:08", material: "Batubara ROM", loadedTon: 98,
+    cycleTimeBreakdown: { queueMinutes: 5.5, spottingMinutes: 1.7, loadingMinutes: 4.0, haulingLoadedMinutes: 27.2, dumpingMinutes: 1.6, returnEmptyMinutes: 19.2 } },
+  { cycleId: "RIT-12", timeLabel: "14:50", material: "Batubara ROM", loadedTon: 93,
+    cycleTimeBreakdown: { queueMinutes: 4.0, spottingMinutes: 1.5, loadingMinutes: 3.8, haulingLoadedMinutes: 26.5, dumpingMinutes: 1.5, returnEmptyMinutes: 18.8 } },
+]
 
 // ─────────────────────────────────────────────
 // ROAD INTELLIGENCE — mock data segmen jalur haul road

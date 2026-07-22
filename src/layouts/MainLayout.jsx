@@ -4,6 +4,7 @@ import TyreMonitoring from "../features/tyre-monitoring/TyreMonitoring";
 import AiInsight from "../features/ai-insight/AiInsight";
 import RoadIntelligence from "../features/road/RoadIntelligence";
 import Operator from "../features/operator/Operator";
+import PayloadManagement from "../features/payload/PayloadManagement";
 import Reports from "../features/reports/Reports";
 import logoTyreMind from "../assets/logo_tyremind.png";
 
@@ -50,6 +51,18 @@ const IconOperator = ({ className }) => (
     <circle cx="10" cy="7" r="3.2" stroke="currentColor" strokeWidth="1.7" />
     <path d="M3.5 17.5C3.5 14.186 6.41 11.5 10 11.5C13.59 11.5 16.5 14.186 16.5 17.5"
       stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+
+const IconPayload = ({ className }) => (
+  <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 2.5V6.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="M4 6.5H16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="M4 6.5L2 11.5C2 13 3.5 13.5 5 13.5C6.5 13.5 8 13 8 11.5L6 6.5"
+      stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M16 6.5L14 11.5C14 13 15.5 13.5 17 13.5C18.5 13.5 20 13 20 11.5L18 6.5"
+      stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" transform="translate(-2 0)" />
+    <rect x="6" y="15" width="8" height="3" rx="1" stroke="currentColor" strokeWidth="1.5" />
   </svg>
 );
 
@@ -119,6 +132,12 @@ const NAV_ITEMS = [
     id: "operator",
     label: "Operator",
     icon: IconOperator,
+    badge: null,
+  },
+  {
+    id: "payload",
+    label: "Payload Hauler",
+    icon: IconPayload,
     badge: null,
   },
   {
@@ -345,6 +364,7 @@ export default function MainLayout() {
           {activeMenu === "ai-insight" && <AiInsight />}
           {activeMenu === "road" && <RoadIntelligence />}
           {activeMenu === "operator" && <Operator />}
+          {activeMenu === "payload" && <PayloadManagement />}
           {activeMenu === "reports" && <Reports />}
         </main>
       </div>
