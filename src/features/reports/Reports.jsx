@@ -191,11 +191,6 @@ function LoraStatusCard() {
           <GatewayRow key={gw.id} gateway={gw} />
         ))}
       </div>
-
-      <p className="text-[#8FA89A] text-[10px] mt-3">
-        Sensor terhubung ke gateway manapun yang jangkauannya tersedia — data tetap sampai walau salah
-        satu gateway offline. Konfigurasi jaringan dikelola dari sisi instalasi, bukan dari halaman ini.
-      </p>
     </div>
   );
 }
@@ -217,13 +212,6 @@ function PayloadIntegrationCard({ unit }) {
           Tersambung
         </span>
       </div>
-
-      <p className="text-[#6B8F7A] text-[11.5px] leading-relaxed mb-4">
-        Data payload <strong>bukan</strong> berasal dari sensor ban TyreMind. Sensor ban hanya membaca
-        tekanan, suhu, dan degradasi material. Berat muatan dibaca dari sistem On-Board Weighing /
-        Payload Meter bawaan unit, lalu diteruskan ke TyreMind melalui gateway LoRa yang sama.
-      </p>
-
       <div className="rounded-xl bg-[#F4F7F5] p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <span className="text-[#6B8F7A] text-[11px] font-semibold">Sumber Data</span>
@@ -344,11 +332,13 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* ── IOT LoRa + BATERAI SENSOR + INTEGRASI PAYLOAD ── */}
+      {/* ── IOT LoRa + INTEGRASI PAYLOAD (kolom kiri) + BATERAI SENSOR (kolom kanan) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-        <LoraStatusCard />
+        <div className="flex flex-col gap-5">
+          <LoraStatusCard />
+          {unit && <PayloadIntegrationCard unit={unit} />}
+        </div>
         {unit && <SensorBatteryCard tyres={unit.tyres} />}
-        {unit && <PayloadIntegrationCard unit={unit} />}
       </div>
     </div>
   );

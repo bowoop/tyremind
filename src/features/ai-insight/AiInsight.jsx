@@ -402,7 +402,7 @@ function CostRoiSection({ unit, payloadAnalysis, cycleTimeAnalysis }) {
         </p>
         <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">Cost Impact & ROI (per unit HD785)</h2>
         <p className="text-[#6B8F7A] text-[12px] mt-1">
-          Estimasi ilustratif untuk business case — kalikan sesuai jumlah unit HD785 di fleet Anda untuk proyeksi
+          Estimasi ilustratif untuk business case untuk 1 unit
           skala penuh.
         </p>
       </div>

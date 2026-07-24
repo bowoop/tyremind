@@ -598,8 +598,7 @@ function CycleTimeSection({ cycles }) {
         </p>
         <StageStackedBar avgStageMinutes={analysis.avgStageMinutes} totalMinutes={analysis.avgTotalMinutes} />
         <p className="text-[#8FA89A] text-[10px] mt-3">
-          Angka merah = tahap ini melebihi target rata-rata &gt;0.4 menit. Hauling (Loaded) diturunkan dari rute
-          ~12 km & profil kecepatan yang sama dengan modul Operator.
+          Angka merah = tahap ini melebihi target rata-rata &gt;0.4 menit (batas toleransi). 
         </p>
       </div>
 
@@ -617,7 +616,7 @@ function CycleTimeSection({ cycles }) {
       <div className="rounded-xl bg-[#FDF3E0] px-4 py-3">
         <p className="text-[#B8790E] text-[11px] font-bold">Catatan metodologi</p>
         <p className="text-[#B8790E]/90 text-[10.5px] mt-1 leading-snug">
-          Target waktu per tahap adalah asumsi ilustratif berbasis rentang wajar operasi excavator-HD785, bukan
+          Target waktu per tahap adalah asumsi ilustratif berbasis rentang wajar operasi Komatsu-HD785, bukan
           SOP/standard time resmi KPP. Potensi ritase tambahan per shift adalah proyeksi linear (asumsi shift{" "}
           {analysis.shiftMinutes / 60} jam), belum memperhitungkan variasi antrian riil.
         </p>

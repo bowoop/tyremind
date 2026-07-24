@@ -324,9 +324,6 @@ export default function PayloadManagement() {
               selectedCycleId={selectedCycleId}
               onSelectCycle={handleSelect}
             />
-            <p className="text-[#8FA89A] text-[10px] mt-2">
-              Klik salah satu batang untuk menyorot ritase yang sama di daftar detail di samping.
-            </p>
           </div>
 
           {/* KANAN — Detail ritase */}
@@ -377,7 +374,7 @@ export default function PayloadManagement() {
         <p className="text-[#B8790E]/90 text-[10.5px] mt-1 leading-snug">
           Estimasi ritase tambahan adalah proyeksi linear sederhana (ton hilang ÷ rated payload), belum
           memperhitungkan cycle time/jarak aktual per ritase. Belum ada estimasi biaya (BBM, maintenance) karena
-          data unit-cost belum terintegrasi. Lihat services/payloadModel.js untuk detail asumsi.
+          data unit-cost belum terintegrasi.
         </p>
       </div>
     </div>

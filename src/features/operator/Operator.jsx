@@ -419,11 +419,6 @@ export default function Operator() {
           analysis={analysis}
           selectedMetric={selectedMetric}
         />
-        <p className="text-[#8FA89A] text-[10px] mt-2">
-          Klik salah satu kategori di atas untuk menyorot lokasinya di grafik. "Harsh" didekati dari perubahan
-          kecepatan ≥{HARSH_DELTA_THRESHOLD_KMH} km/h antar titik sampel jarak — bukan akselerasi sebenarnya
-          (perlu data waktu), lihat catatan di drivingBehaviorModel.js.
-        </p>
 
         {selectedMetric && (
           <EventDetailPanel metricKey={selectedMetric} analysis={analysis} onClose={() => setSelectedMetric(null)} />
@@ -431,7 +426,7 @@ export default function Operator() {
 
         {analysis.overallScore < 70 && (
           <div className="rounded-xl bg-[#FDF3E0] px-3.5 py-3 mt-5">
-            <p className="text-[#B8790E] text-[11.5px] font-bold">Coaching disarankan</p>
+            <p className="text-[#B8790E] text-[11.5px] font-bold">Reccomended Action</p>
             <p className="text-[#B8790E]/90 text-[10.5px] mt-0.5">
               Kurangi overspeed dan harsh braking di segmen berisiko tinggi untuk memperpanjang umur ban.
             </p>

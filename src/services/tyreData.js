@@ -332,6 +332,8 @@ export const roadSegments = [
     incidentCount30d: 5,
     tyreImpactNote: "Permukaan tidak rata meningkatkan beban kejut pada ban belakang.",
     incidents: [
+      { date: "2026-07-25", description: "Guncangan keras terdeteksi di titik KM 3.4, ban RR-04 mengalami lonjakan tekanan sesaat saat unit bermuatan penuh." },
+      { date: "2026-07-22", description: "Operator melaporkan getaran berlebih pada roda belakang saat melintas titik berbatu di KM 3.2." },
       { date: "2026-07-18", description: "Guncangan keras terdeteksi di titik KM 3.2, ban RR-04 mengalami lonjakan tekanan sesaat." },
       { date: "2026-07-14", description: "Operator melaporkan getaran berlebih pada roda belakang saat melintas dengan muatan penuh." },
       { date: "2026-07-09", description: "Keausan tidak merata terdeteksi pada ban RL-03 akibat permukaan bergelombang." },
@@ -348,6 +350,7 @@ export const roadSegments = [
     incidentCount30d: 2,
     tyreImpactNote: "Tanjakan menambah beban torsi dan suhu ban saat unit bermuatan penuh.",
     incidents: [
+      { date: "2026-07-23", description: "Traksi berkurang saat menanjak dengan muatan penuh akibat debu tebal di area tanjakan." },
       { date: "2026-07-16", description: "Suhu ban RR-04 sempat mencapai 82°C saat menanjak dengan muatan penuh." },
       { date: "2026-07-05", description: "Operator melaporkan traksi berkurang akibat debu tebal di area tanjakan." }
     ]

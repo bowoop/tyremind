@@ -81,13 +81,24 @@ export const COST_ASSUMPTIONS = {
 };
 
 export const CAPEX_ASSUMPTIONS = {
-  // ASUMSI: paket sensor kimia EIS + TPMS + node LoRa per unit, mencakup
-  // 6 titik ban fisik (2 depan + 4 belakang dual) — naik dari estimasi
-  // sebelumnya yang keliru menghitung 4 titik. ~11.25 juta/titik ban.
-  sensorKitPerUnitIDR: 67_500_000,
+  // DATA VALID dari BOM (Bill of Materials) komponen sensor milik pengguna
+  // ("Dampak Nyata terhadap Produktivitas, Biaya Operasional, dan
+  // Keselamatan" — tabel Komponen/Spesifikasi/Estimasi Biaya): TOTAL
+  // Rp6.500.000 per 1 titik sensor (probe elektrode, batang konduktor,
+  // selongsong pelindung, kabel jalinan tembaga, PCB industrial, capsule
+  // IP67, baterai Li-SOCl2, sabuk baja, pengunci T-Bolt, kawat pengaman,
+  // chip LoRa, sensor EIS) — dikali 6 titik ban fisik per unit HD785
+  // (2 depan + 4 belakang dual) = Rp43.000.000/unit. Menggantikan angka
+  // ilustratif sebelumnya (Rp67,5 juta/unit, ~Rp11,25 juta/titik) yang
+  // belum ditarik dari BOM asli ini.
+  sensorKitPerUnitIDR: 39_000_000,
   // ASUMSI: setup dashboard, gateway LoRa, integrasi PLM/FMS (biaya sekali)
-  platformSetupOneTimeIDR: 150_000_000,
-  // ASUMSI: lisensi software & maintenance sistem per unit per tahun
+  // — BELUM ada di tabel BOM komponen sensor pengguna (tabel itu hanya
+  // mencakup hardware per titik sensor, bukan biaya setup platform), jadi
+  // masih estimasi ilustratif sampai ada rincian biaya setup aktual.
+  platformSetupOneTimeIDR: 5_000_000,
+  // ASUMSI: lisensi software & maintenance sistem per unit per tahun —
+  // juga belum ada di tabel BOM pengguna, masih estimasi ilustratif.
   annualPlatformFeePerUnitIDR: 8_000_000,
 };
 
@@ -318,10 +329,7 @@ export function estimateFuelSaving(payloadAnalysis, cycleTimeAnalysis, assumptio
 }
 
 export const DOWNTIME_RISK_NOTE =
-  "Penurunan downtime/biaya kerusakan (sasis, transmisi, blown tyre) belum dihitung dalam Rupiah karena belum " +
-  "ada data biaya perbaikan & downtime historis situs KPP sebagai dasar. Secara kualitatif, menurunkan frekuensi " +
-  "overload serta suhu/tekanan abnormal (lihat Rekomendasi Perawatan) mengurangi paparan risiko blown tyre dan " +
-  "keretakan frame/vessel — estimasi kuantitatif dapat ditambahkan begitu data downtime/repair cost historis tersedia.";
+  "Penurunan downtime/biaya kerusakan belum dihitung untuk sasis, transmisi, blown tyre";
 
 // Rentang persentase penurunan downtime — BUKAN dihitung dari data operasional situs KPP
 // (masih belum ada data biaya perbaikan/downtime historis, lihat DOWNTIME_RISK_NOTE),
