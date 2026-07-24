@@ -32,8 +32,7 @@ import { useState } from "react";
 import { fleet, TyreStatus, roadSegments, payloadCycles, estimateTyreRulDays } from "../../services/tyreData";
 import { analyzePayloadCycles, analyzeCycleTimeForCycles } from "../../services/payloadModel";
 import {
-  computeTKPH,
-  tkphUtilizationStatus,
+  computeTKPHFromCycles,
   recommendTyreRotation,
   recommendCorrectiveActions,
   recommendPLMCalibration,
@@ -254,14 +253,9 @@ function PriorityPill({ label }) {
 // ─────────────────────────────────────────────
 
 function MaintenanceRecommendationsSection({ unit, mostDangerousSegment, payloadAnalysis, cycleTimeAnalysis }) {
-  const avgPayloadTon = payloadAnalysis.totalTonHauled / payloadAnalysis.totalCycles;
-  const haulStage = cycleTimeAnalysis.avgStageMinutes.find((s) => s.key === "haulingLoadedMinutes");
-  const returnStage = cycleTimeAnalysis.avgStageMinutes.find((s) => s.key === "returnEmptyMinutes");
-
-  const tkph = computeTKPH(unit, avgPayloadTon, haulStage.avgActualMinutes, returnStage.avgActualMinutes);
-  const tkphStatus = tkphUtilizationStatus(tkph.tkphWeighted);
-  const rotationRecs = recommendTyreRotation(unit.tyres, tkphStatus);
-  const correctiveActions = recommendCorrectiveActions(unit.tyres, mostDangerousSegment);
+  const tkphResult = computeTKPHFromCycles(unit, payloadAnalysis, cycleTimeAnalysis);
+  const rotationRecs = recommendTyreRotation(unit.tyres, tkphResult);
+  const correctiveActions = recommendCorrectiveActions(unit.tyres, mostDangerousSegment, tkphResult);
   const plm = recommendPLMCalibration(payloadAnalysis);
   const frame = recommendFrameVesselInspection(payloadAnalysis);
 
@@ -273,39 +267,48 @@ function MaintenanceRecommendationsSection({ unit, mostDangerousSegment, payload
         </p>
         <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">Predictive Tyre Maintenance</h2>
         <p className="text-[#6B8F7A] text-[12px] mt-1">
-          Rotasi ban berbasis keausan & TKPH (Ton-Kilometer per Hour) — bukan sekadar jam kerja unit.
+          Rotasi ban berbasis keausan & Real Site TKPH (Ton-Kilometer per Hour, formula resmi Michelin) — bukan
+          sekadar jam kerja unit.
         </p>
       </div>
 
-      {/* TKPH */}
-      <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em]">
-            TKPH (Ton-Kilometer per Hour)
-          </p>
-          <PriorityPill label={tkphStatus.status === "CRITICAL" ? "Tinggi" : tkphStatus.status === "WARNING" ? "Sedang" : "Rendah"} />
-        </div>
-        <div className="flex items-end gap-3 mb-2">
-          <span className="text-[#0B3B2D] text-3xl font-bold tracking-tight leading-none">{tkph.tkphWeighted}</span>
-          <span className="text-[#8FA89A] text-[12px] font-medium mb-1">
-            TKPH · {tkphStatus.utilizationPct}% dari rating {tkphStatus.rating}
-          </span>
-        </div>
-        <div className="h-2 w-full bg-[#EDF3EF] rounded-full overflow-hidden mb-3">
-          <div
-            className="h-full rounded-full"
-            style={{
-              width: `${Math.min(100, tkphStatus.utilizationPct)}%`,
-              backgroundColor: tkphStatus.status === "CRITICAL" ? "#C84B31" : tkphStatus.status === "WARNING" ? "#E0A526" : "#1A7A4A",
-            }}
-          />
-        </div>
-        <p className="text-[#6B8F7A] text-[11px]">
-          Dihitung dari GVW ({unit.emptyWeightTon} ton kosong + {Math.round(avgPayloadTon)} ton rata-rata payload) ÷{" "}
-          {unit.physicalTyreCount} ban, dikombinasikan dengan kecepatan rata-rata loaded ({tkph.avgSpeedLoadedKmh}{" "}
-          km/h) & empty ({tkph.avgSpeedEmptyKmh} km/h). Rating {tkphStatus.rating} TKPH adalah asumsi ilustratif —
-          ganti dengan datasheet resmi ban terpasang.
-        </p>
+      {/* TKPH — per axle (front & rear beban/jumlah ban beda) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {["front", "rear"].map((axleKey) => {
+          const axle = tkphResult[axleKey];
+          const label = axleKey === "front" ? "Axle Depan" : "Axle Belakang";
+          const priorityLabel = axle.status === "CRITICAL" ? "Tinggi" : axle.status === "WARNING" ? "Sedang" : "Rendah";
+          return (
+            <div key={axleKey} className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em]">
+                  Real Site TKPH — {label}
+                </p>
+                <PriorityPill label={priorityLabel} />
+              </div>
+              <div className="flex items-end gap-3 mb-2">
+                <span className="text-[#0B3B2D] text-3xl font-bold tracking-tight leading-none">{axle.realSiteTKPH}</span>
+                <span className="text-[#8FA89A] text-[12px] font-medium mb-1">
+                  TKPH · {axle.utilizationPct}% dari rating {axle.tkphRating}
+                </span>
+              </div>
+              <div className="h-2 w-full bg-[#EDF3EF] rounded-full overflow-hidden mb-3">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, axle.utilizationPct)}%`,
+                    backgroundColor: axle.status === "CRITICAL" ? "#C84B31" : axle.status === "WARNING" ? "#E0A526" : "#1A7A4A",
+                  }}
+                />
+              </div>
+              <p className="text-[#6B8F7A] text-[11px]">
+                Basic Site TKPH {axle.basicSiteTKPH} (Qm {axle.qmTon} ton × Vm {tkphResult.vmKmh} km/h) × K1{" "}
+                {tkphResult.k1} (koreksi panjang siklus) × K2 {tkphResult.k2} (koreksi suhu ambient{" "}
+                {tkphResult.ambientTempC}°C — asumsi). Rating {axle.tkphRating} TKPH: Michelin 27.00R49 compound B4.
+              </p>
+            </div>
+          );
+        })}
       </div>
 
       {/* Rotasi ban */}
@@ -513,7 +516,7 @@ export default function AiInsight() {
   const remainingKm = criticalTyre.remainingUsefulLifeKm;
   const isUrgent = riskScore >= 60;
 
-  const payloadAnalysis = analyzePayloadCycles(payloadCycles, unit.ratedPayloadTon);
+  const payloadAnalysis = analyzePayloadCycles(payloadCycles, unit.ratedPayloadTon, unit.payloadToleranceMinTon, unit.payloadToleranceMaxTon);
   const cycleTimeAnalysis = analyzeCycleTimeForCycles(payloadCycles);
 
   return (

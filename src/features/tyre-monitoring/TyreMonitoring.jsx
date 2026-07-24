@@ -53,8 +53,8 @@ function pressureStatus(psi) {
   return TyreStatus.NORMAL;
 }
 function temperatureStatus(celsius) {
-  if (celsius > 75) return TyreStatus.CRITICAL;
-  if (celsius > 65) return TyreStatus.WARNING;
+  if (celsius > 93) return TyreStatus.CRITICAL;
+  if (celsius >= 80) return TyreStatus.WARNING;
   return TyreStatus.NORMAL;
 }
 function degradationStatus(pct) {
@@ -217,15 +217,18 @@ function LegendDot({ color, label }) {
 }
 
 // ─────────────────────────────────────────────
-// TRUCK LAYOUT DIAGRAM — tampak atas, 4 posisi ban
+// TRUCK LAYOUT DIAGRAM — tampak atas, 6 posisi ban fisik
+// (2 depan + 4 belakang dual/paralel per sisi)
 // ─────────────────────────────────────────────
 
 function TruckLayoutDiagram({ tyres, selectedId, onSelect }) {
   const layout = [
     { pos: TyrePosition.FRONT_LEFT, top: "13%", left: "16%" },
     { pos: TyrePosition.FRONT_RIGHT, top: "13%", left: "84%" },
-    { pos: TyrePosition.REAR_LEFT, top: "83%", left: "16%" },
-    { pos: TyrePosition.REAR_RIGHT, top: "83%", left: "84%" },
+    { pos: TyrePosition.REAR_LEFT_OUTER, top: "83%", left: "8%" },
+    { pos: TyrePosition.REAR_LEFT_INNER, top: "83%", left: "30%" },
+    { pos: TyrePosition.REAR_RIGHT_INNER, top: "83%", left: "70%" },
+    { pos: TyrePosition.REAR_RIGHT_OUTER, top: "83%", left: "92%" },
   ];
 
   return (

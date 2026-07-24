@@ -2,13 +2,16 @@
  * TyreMind — Model Rekomendasi Perawatan & Analisis Biaya/ROI
  *
  * File integrasi lintas-modul: menarik data dari tyreData.js (ban,
- * spesifikasi unit, segmen jalan) dan payloadModel.js (analisis payload
- * & cycle time) untuk menghasilkan:
+ * spesifikasi unit, segmen jalan), payloadModel.js (analisis payload
+ * & cycle time), dan tyreSpecModel.js (data resmi Michelin: TKPH,
+ * tabel tekanan/beban, koefisien K1/K2) untuk menghasilkan:
  *
  *   BAGIAN 1 — PREDICTIVE TYRE MAINTENANCE
- *   TKPH (Ton-Kilometer per Hour) per ban, rekomendasi rotasi berbasis
- *   keausan + TKPH (BUKAN jam kerja unit), dan tindakan korektif kalau
- *   sensor mendeteksi suhu/tekanan abnormal di rute KM 33.
+ *   Real Site TKPH (Ton-Kilometer per Hour) per axle (formula resmi
+ *   Michelin: Qm x Vm x K1 x K2), rekomendasi rotasi berbasis keausan +
+ *   TKPH (BUKAN jam kerja unit), dan tindakan korektif berbasis tekanan
+ *   minimum resmi (tabel Pressure/Load Michelin) kalau sensor mendeteksi
+ *   tekanan di bawah kebutuhan beban aktual di rute KM 33.
  *
  *   BAGIAN 2 — KALIBRASI & PERAWATAN UNIT HD785
  *   Rekomendasi kalibrasi Payload Meter (PLM) & suspensi, serta inspeksi
@@ -19,16 +22,32 @@
  *   CapEx vs OpEx.
  *
  * ⚠️ CATATAN METODOLOGI — PENTING dibaca sebelum dipakai untuk pitch/keputusan:
+ * - TKPH & tekanan minimum SUDAH pakai data resmi "Michelin Tire Database
+ *   — HD785" yang diberikan pengguna (lihat services/tyreSpecModel.js).
+ *   Nilai default INSTALLED_TYRE_COMPOUND = "B4" (TKPH 528) — GANTI ke
+ *   "A" (TKPH 432) di tyreSpecModel.js bila compound aktual di site beda.
+ * - Ambang SUHU (TEMP_WARNING_C/TEMP_CRITICAL_C) SUDAH diupdate ke nilai
+ *   tervalidasi yang diberikan pengguna langsung (<80°C Good, 80-93°C
+ *   Warning, >93°C Critical) — sheet "Temperature_Zones" yang disebut di
+ *   README file Excel tidak ada secara fisik di file yang diunggah,
+ *   jadi angka ini bersumber dari instruksi eksplisit pengguna, bukan
+ *   dibaca langsung dari sheet Excel.
+ * - Suhu ambient untuk koreksi K2 pakai DEFAULT_AMBIENT_TEMP_C (asumsi
+ *   32°C, tropis) di tyreSpecModel.js — belum ada integrasi data cuaca
+ *   live per site.
  * - Semua angka Rupiah & liter BBM di BAGIAN 3 adalah ESTIMASI ILUSTRATIF
  *   untuk business case, BUKAN harga kontrak/biaya aktual situs KPP.
  *   Sumber acuan tiap konstanta dicatat di sebelah nilainya — ganti dengan
  *   angka kontrak/vendor aktual begitu tersedia.
- * - TYRE_TKPH_RATING (380) adalah asumsi ilustratif berbasis rentang umum
- *   ban OTR E4 ukuran 27.00R49, BUKAN datasheet resmi merek ban terpasang.
  * - Penurunan downtime/biaya kerusakan TIDAK dihitung dalam Rupiah (lihat
  *   DOWNTIME_RISK_NOTE) karena belum ada data biaya perbaikan historis
  *   situs sebagai dasar — hanya disampaikan sebagai narasi kualitatif.
  */
+
+import {
+  computeRealSiteTKPH,
+  getMinRequiredPressurePsi,
+} from "./tyreSpecModel";
 
 // ─────────────────────────────────────────────
 // KONSTANTA ASUMSI — setiap nilai diberi sumber/catatan
@@ -36,16 +55,14 @@
 
 export const HAUL_ONE_WAY_KM = 12; // selaras dengan driverBehavior.speedProfile & payloadModel
 
-// ASUMSI ilustratif — rating TKPH umum ban OTR E4 27.00R49 (rentang duty
-// standard-heavy ~300-450). Ganti dengan datasheet resmi ban terpasang.
-export const TYRE_TKPH_RATING = 380;
-
-// Ambang suhu/tekanan — DISELARASKAN dengan kategori TyreStatus yang sudah
-// dipakai di tyreData.js (Normal/Warning/Critical), bukan angka baru.
-export const TEMP_WARNING_C = 65;
-export const TEMP_CRITICAL_C = 75;
-export const PRESSURE_WARNING_PSI = 100;
-export const PRESSURE_CRITICAL_PSI = 90;
+// Ambang suhu — nilai TERVALIDASI dari pengguna (bukan asumsi lagi):
+// <80°C Good/Normal, 80-93°C Warning, >93°C Critical. Sheet
+// "Temperature_Zones" yang disebut di README Excel tidak ada secara
+// fisik di file yang diunggah, jadi angka ini diberikan langsung oleh
+// pengguna, bukan dibaca dari sel Excel — dicatat di sini agar sumbernya
+// jelas kalau perlu dikonfirmasi ulang ke datasheet resmi nanti.
+export const TEMP_WARNING_C = 80;
+export const TEMP_CRITICAL_C = 93;
 
 export const COST_ASSUMPTIONS = {
   // Referensi listing ban OTR 27.00R49 di marketplace alat berat Indonesia
@@ -64,8 +81,10 @@ export const COST_ASSUMPTIONS = {
 };
 
 export const CAPEX_ASSUMPTIONS = {
-  // ASUMSI: paket sensor kimia EIS + TPMS + node LoRa per unit (4 titik ban)
-  sensorKitPerUnitIDR: 45_000_000,
+  // ASUMSI: paket sensor kimia EIS + TPMS + node LoRa per unit, mencakup
+  // 6 titik ban fisik (2 depan + 4 belakang dual) — naik dari estimasi
+  // sebelumnya yang keliru menghitung 4 titik. ~11.25 juta/titik ban.
+  sensorKitPerUnitIDR: 67_500_000,
   // ASUMSI: setup dashboard, gateway LoRa, integrasi PLM/FMS (biaya sekali)
   platformSetupOneTimeIDR: 150_000_000,
   // ASUMSI: lisensi software & maintenance sistem per unit per tahun
@@ -81,61 +100,57 @@ function round1(n) {
 // ─────────────────────────────────────────────
 
 /**
- * Menghitung TKPH (Ton-Kilometer per Hour) per ban dari GVW (empty + rata-rata
- * payload) dan kecepatan rata-rata loaded/empty (dari cycle time). TKPH
- * dihitung time-weighted antara fase loaded & empty dalam 1 ritase.
+ * Menghitung Real Site TKPH resmi Michelin (Qm x Vm x K1 x K2), TERPISAH
+ * untuk axle depan & belakang — lihat services/tyreSpecModel.js untuk
+ * detail formula & tabel referensinya.
+ *
+ * Fase "loaded" (membawa GVW penuh) = loading + hauling loaded + dumping.
+ * Fase "empty" (unladen) = queue + spotting + return empty. Loading
+ * sendiri sebetulnya transisi (berat bertambah bertahap) — disederhanakan
+ * masuk fase loaded (konservatif, karena di akhir loading beban sudah
+ * penuh).
  */
-export function computeTKPH(unit, avgPayloadTon, haulingLoadedMinutes, returnEmptyMinutes, oneWayKm = HAUL_ONE_WAY_KM) {
-  const tyreCount = unit.physicalTyreCount ?? unit.tyres.length;
-  const loadedGrossTon = unit.emptyWeightTon + avgPayloadTon;
-  const emptyGrossTon = unit.emptyWeightTon;
+export function computeTKPHFromCycles(unit, payloadAnalysis, cycleTimeAnalysis, ambientTempC) {
+  const avgPayloadTon = payloadAnalysis.totalTonHauled / payloadAnalysis.totalCycles;
+  const stage = (key) => cycleTimeAnalysis.avgStageMinutes.find((s) => s.key === key)?.avgActualMinutes || 0;
 
-  const avgSpeedLoadedKmh = haulingLoadedMinutes > 0 ? oneWayKm / (haulingLoadedMinutes / 60) : 0;
-  const avgSpeedEmptyKmh = returnEmptyMinutes > 0 ? oneWayKm / (returnEmptyMinutes / 60) : 0;
+  const loadedPhaseMinutes = stage("loadingMinutes") + stage("haulingLoadedMinutes") + stage("dumpingMinutes");
+  const emptyPhaseMinutes = stage("queueMinutes") + stage("spottingMinutes") + stage("returnEmptyMinutes");
+  const totalCycleMinutes = cycleTimeAnalysis.avgTotalMinutes;
+  const cycleLengthKm = HAUL_ONE_WAY_KM * 2; // round trip penuh (loaded + empty)
 
-  const tkphLoaded = (loadedGrossTon / tyreCount) * avgSpeedLoadedKmh;
-  const tkphEmpty = (emptyGrossTon / tyreCount) * avgSpeedEmptyKmh;
-
-  const totalMinutes = haulingLoadedMinutes + returnEmptyMinutes;
-  const tkphWeighted =
-    totalMinutes > 0 ? (tkphLoaded * haulingLoadedMinutes + tkphEmpty * returnEmptyMinutes) / totalMinutes : 0;
-
-  return {
-    avgSpeedLoadedKmh: round1(avgSpeedLoadedKmh),
-    avgSpeedEmptyKmh: round1(avgSpeedEmptyKmh),
-    tkphLoaded: round1(tkphLoaded),
-    tkphEmpty: round1(tkphEmpty),
-    tkphWeighted: round1(tkphWeighted),
-  };
-}
-
-export function tkphUtilizationStatus(tkphWeighted, rating = TYRE_TKPH_RATING) {
-  const utilizationPct = round1((tkphWeighted / rating) * 100);
-  let status = "NORMAL";
-  if (utilizationPct >= 100) status = "CRITICAL";
-  else if (utilizationPct >= 85) status = "WARNING";
-  return { utilizationPct, status, rating };
+  return computeRealSiteTKPH({
+    unit,
+    payloadTon: avgPayloadTon,
+    loadedPhaseMinutes,
+    emptyPhaseMinutes,
+    totalCycleMinutes,
+    cycleLengthKm,
+    ...(ambientTempC !== undefined ? { ambientTempC } : {}),
+  });
 }
 
 /**
  * Rekomendasi rotasi/penggantian ban — berbasis KEAUSAN (healthScore /
- * materialDegradationPct) DAN TKPH unit, bukan sekadar jam kerja unit.
+ * materialDegradationPct) DAN Real Site TKPH axle-nya masing-masing
+ * (bukan sekadar jam kerja unit).
  */
-export function recommendTyreRotation(tyres, tkphStatus) {
-  // Catatan TKPH bersifat UNIT-LEVEL (sama untuk semua ban), jadi ditaruh
-  // sebagai tambahan singkat pada baris yang relevan — bukan diulang jadi
-  // alasan utama "Tinggi" di semua ban, supaya prioritas tetap dibedakan
-  // berdasarkan keausan tiap ban.
-  const tkphNote =
-    tkphStatus.status === "CRITICAL"
-      ? ` TKPH duty cycle unit saat ini (${tkphStatus.utilizationPct}% dari rating ${tkphStatus.rating}) melebihi batas aman ban — percepat jadwal ini, atau pertimbangkan ban rating TKPH lebih tinggi / turunkan kecepatan loaded di rute ini.`
-      : tkphStatus.status === "WARNING"
-      ? ` TKPH duty cycle unit (${tkphStatus.utilizationPct}% dari rating ${tkphStatus.rating}) mendekati batas — pertimbangkan percepat jadwal ini.`
-      : "";
-
+export function recommendTyreRotation(tyres, tkphResult) {
   return [...tyres]
     .sort((a, b) => a.healthScore - b.healthScore)
     .map((tyre) => {
+      const axleTkph = tyre.axle === "FRONT" ? tkphResult.front : tkphResult.rear;
+      // Catatan TKPH bersifat per-AXLE (sama untuk semua ban di axle yang
+      // sama), jadi ditaruh sebagai tambahan singkat — bukan diulang jadi
+      // alasan utama "Tinggi" di semua ban, supaya prioritas tetap
+      // dibedakan berdasarkan keausan tiap ban.
+      const tkphNote =
+        axleTkph.status === "CRITICAL"
+          ? ` Real Site TKPH axle ${tyre.axle.toLowerCase()} saat ini ${axleTkph.realSiteTKPH} (${axleTkph.utilizationPct}% dari rating ${axleTkph.tkphRating}) — melebihi batas aman ban, percepat jadwal ini atau pertimbangkan ban rating TKPH lebih tinggi / turunkan kecepatan loaded di rute ini.`
+          : axleTkph.status === "WARNING"
+          ? ` Real Site TKPH axle ${tyre.axle.toLowerCase()} (${axleTkph.utilizationPct}% dari rating ${axleTkph.tkphRating}) mendekati batas — pertimbangkan percepat jadwal ini.`
+          : "";
+
       let priority = "Rendah";
       let action = `Ban ${tyre.id} dalam kondisi wajar (keausan ${tyre.materialDegradationPct}%) — monitor rutin, belum perlu tindakan.`;
 
@@ -143,34 +158,45 @@ export function recommendTyreRotation(tyres, tkphStatus) {
         priority = "Tinggi";
         action = `Ban ${tyre.id} kondisi kritis (keausan ${tyre.materialDegradationPct}%) — jadwalkan penggantian, JANGAN dirotasi ke posisi lain.${tkphNote}`;
       } else if (tyre.status === "Warning") {
-        priority = tkphStatus.status === "CRITICAL" ? "Tinggi" : "Sedang";
+        priority = axleTkph.status === "CRITICAL" ? "Tinggi" : "Sedang";
         action = `Jadwalkan rotasi ban ${tyre.id} dalam waktu dekat — keausan ${tyre.materialDegradationPct}%.${tkphNote}`;
-      } else if (tkphStatus.status === "CRITICAL") {
+      } else if (axleTkph.status === "CRITICAL") {
         priority = "Sedang";
         action = `Ban ${tyre.id} keausan masih wajar (${tyre.materialDegradationPct}%), namun${tkphNote} Percepat rotasi ban ini juga sebagai antisipasi.`;
       }
 
-      return { tyreId: tyre.id, position: tyre.position, healthScore: tyre.healthScore, priority, action };
+      return { tyreId: tyre.id, position: tyre.position, axle: tyre.axle, healthScore: tyre.healthScore, priority, action };
     });
 }
 
 /**
- * Tindakan korektif kalau sensor mendeteksi suhu/tekanan abnormal —
- * dikaitkan dengan segmen rute (mis. KM 33) yang sedang dilalui.
+ * Tindakan korektif kalau sensor mendeteksi suhu abnormal ATAU tekanan
+ * di bawah kebutuhan MINIMUM resmi (tabel Pressure/Load Michelin) untuk
+ * beban aktual axle ban tsb — dikaitkan dengan segmen rute (mis. KM 33)
+ * yang sedang dilalui.
  */
-export function recommendCorrectiveActions(tyres, mostDangerousSegment) {
+export function recommendCorrectiveActions(tyres, mostDangerousSegment, tkphResult) {
   const actions = [];
   tyres.forEach((tyre) => {
+    const loadedKg = tyre.axle === "FRONT" ? tkphResult.axleLoads.frontLoadedKg : tkphResult.axleLoads.rearLoadedKg;
+    const minRequiredPsi = getMinRequiredPressurePsi(loadedKg);
+
     const tempAbnormal = tyre.temperatureCelcius >= TEMP_WARNING_C;
-    const pressureAbnormal = tyre.pressurePsi <= PRESSURE_WARNING_PSI;
+    const pressureAbnormal = tyre.pressurePsi < minRequiredPsi;
     if (!tempAbnormal && !pressureAbnormal) return;
 
-    const severity =
-      tyre.temperatureCelcius >= TEMP_CRITICAL_C || tyre.pressurePsi <= PRESSURE_CRITICAL_PSI ? "Tinggi" : "Sedang";
+    const pressureDeficitPsi = round1(minRequiredPsi - tyre.pressurePsi);
+    const severity = tyre.temperatureCelcius >= TEMP_CRITICAL_C || pressureDeficitPsi >= 10 ? "Tinggi" : "Sedang";
 
     const parts = [];
     if (tempAbnormal) parts.push(`suhu ${tyre.temperatureCelcius}°C di atas ambang aman`);
-    if (pressureAbnormal) parts.push(`tekanan ${tyre.pressurePsi} PSI di bawah rentang normal`);
+    if (pressureAbnormal) {
+      parts.push(
+        `tekanan ${tyre.pressurePsi} PSI di bawah minimum resmi ${minRequiredPsi} PSI untuk beban aktual ${Math.round(
+          loadedKg
+        ).toLocaleString("id-ID")} kg (kurang ${pressureDeficitPsi} PSI, tabel Pressure/Load Michelin 27.00R49)`
+      );
+    }
 
     actions.push({
       tyreId: tyre.id,
@@ -245,7 +271,7 @@ export function estimateTyreCostSaving(rulExtensionPct, unit, assumptions = COST
   const avgRulKm = unit.tyres.reduce((s, t) => s + t.remainingUsefulLifeKm, 0) / unit.tyres.length;
   const dailyKm = unit.operationalMetrics.averageDailyDistanceKm;
   const tyreLifeDaysBefore = avgRulKm / dailyKm;
-  const tyreCount = unit.physicalTyreCount ?? unit.tyres.length;
+  const tyreCount = unit.tyres.length;
 
   const replacementsPerYearBefore = (365 / tyreLifeDaysBefore) * tyreCount;
   const annualTyreCostBefore = replacementsPerYearBefore * assumptions.tyreUnitPriceIDR;

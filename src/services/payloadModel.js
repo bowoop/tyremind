@@ -22,10 +22,10 @@
  * tidak ada nilai yang di-hardcode terpisah dari data tersebut.
  *
  * ⚠️ CATATAN METODOLOGI (baca sebelum dipakai untuk keputusan operasional):
- * - PAYLOAD_TOLERANCE_BAND_PCT (±10%) adalah ASUMSI ILUSTRATIF berbasis
- *   praktik umum industri tambang (target payload factor ~90-110% dari
- *   rated payload), BUKAN SOP resmi KPP. Sesuaikan begitu SOP toleransi
- *   payload situs tersedia.
+ * - Toleransi payload SEKARANG pakai batas ton absolut 82–100 ton, dari
+ *   data operasional resmi milik pengguna (sheet Vehicle_HD785, "Michelin
+ *   Tire Database — HD785") — BUKAN lagi asumsi ±10% generik. Lihat
+ *   unitDT001.payloadToleranceMinTon/MaxTon di tyreData.js.
  * - Estimasi "ritase tambahan akibat underload" adalah proyeksi linear
  *   sederhana (tonase yang hilang / rated payload), bukan simulasi
  *   cycle time penuh — belum memperhitungkan antrian loading, jarak
@@ -44,19 +44,26 @@
 // BAGIAN 1 — PAYLOAD MANAGEMENT
 // ─────────────────────────────────────────────
 
-export const PAYLOAD_TOLERANCE_BAND_PCT = 10; // ± dari rated payload, lihat catatan di atas
+// Toleransi payload sekarang pakai batas ton ABSOLUT (82–100 ton) dari
+// data operasional resmi milik pengguna sendiri — lihat
+// unitDT001.payloadToleranceMinTon/MaxTon di tyreData.js. Konstanta
+// pct di bawah HANYA fallback kalau unit tidak menyediakan batas ton
+// eksplisit (mis. dipakai di tempat lain / unit lain di masa depan).
+export const PAYLOAD_TOLERANCE_BAND_PCT_FALLBACK = 10;
 
 /**
- * Mengklasifikasikan satu ritase terhadap rated payload + tolerance band.
+ * Mengklasifikasikan satu ritase terhadap rentang toleransi payload
+ * (batas ton absolut — sumber: data operasional situs, BUKAN persentase
+ * generik).
  */
-export function classifyPayload(loadedTon, ratedTon, tolerancePct = PAYLOAD_TOLERANCE_BAND_PCT) {
+export function classifyPayload(loadedTon, ratedTon, toleranceMinTon, toleranceMaxTon) {
   const utilizationPct = (loadedTon / ratedTon) * 100;
-  const lowerBoundPct = 100 - tolerancePct;
-  const upperBoundPct = 100 + tolerancePct;
+  const minTon = toleranceMinTon ?? ratedTon * (1 - PAYLOAD_TOLERANCE_BAND_PCT_FALLBACK / 100);
+  const maxTon = toleranceMaxTon ?? ratedTon * (1 + PAYLOAD_TOLERANCE_BAND_PCT_FALLBACK / 100);
 
   let payloadClass;
-  if (utilizationPct < lowerBoundPct) payloadClass = "UNDERLOAD";
-  else if (utilizationPct > upperBoundPct) payloadClass = "OVERLOAD";
+  if (loadedTon < minTon) payloadClass = "UNDERLOAD";
+  else if (loadedTon > maxTon) payloadClass = "OVERLOAD";
   else payloadClass = "OPTIMAL";
 
   return {
@@ -73,10 +80,10 @@ export function classifyPayload(loadedTon, ratedTon, tolerancePct = PAYLOAD_TOLE
  * - estimasi dampak produktivitas (ton yang "hilang" akibat underload) dan
  *   paparan risiko (ton kelebihan beban akibat overload)
  */
-export function analyzePayloadCycles(cycles, ratedTon, tolerancePct = PAYLOAD_TOLERANCE_BAND_PCT) {
+export function analyzePayloadCycles(cycles, ratedTon, toleranceMinTon, toleranceMaxTon) {
   const details = cycles.map((cycle) => ({
     ...cycle,
-    ...classifyPayload(cycle.loadedTon, ratedTon, tolerancePct),
+    ...classifyPayload(cycle.loadedTon, ratedTon, toleranceMinTon, toleranceMaxTon),
   }));
 
   const total = details.length || 1;
@@ -109,7 +116,8 @@ export function analyzePayloadCycles(cycles, ratedTon, tolerancePct = PAYLOAD_TO
   return {
     details,
     ratedTon,
-    tolerancePct,
+    toleranceMinTon: toleranceMinTon ?? Math.round(ratedTon * (1 - PAYLOAD_TOLERANCE_BAND_PCT_FALLBACK / 100) * 10) / 10,
+    toleranceMaxTon: toleranceMaxTon ?? Math.round(ratedTon * (1 + PAYLOAD_TOLERANCE_BAND_PCT_FALLBACK / 100) * 10) / 10,
     totalCycles: details.length,
     totalTonHauled: Math.round(totalTonHauled * 10) / 10,
     avgUtilizationPct: Math.round(avgUtilizationPct * 10) / 10,

@@ -16,7 +16,7 @@
 
 import { useState } from "react";
 import { fleet, payloadCycles } from "../../services/tyreData";
-import { analyzePayloadCycles, PAYLOAD_TOLERANCE_BAND_PCT } from "../../services/payloadModel";
+import { analyzePayloadCycles } from "../../services/payloadModel";
 
 // ─────────────────────────────────────────────
 // THEME — selaras dengan Operator.jsx / komponen lain
@@ -99,7 +99,7 @@ function CircularScoreGauge({ score, size = 64, strokeWidth = 7 }) {
 // GRAFIK — payload tiap ritase vs rated payload & tolerance band
 // ─────────────────────────────────────────────
 
-function PayloadCycleChart({ details, ratedTon, tolerancePct, selectedCycleId, onSelectCycle }) {
+function PayloadCycleChart({ details, ratedTon, toleranceMinTon, toleranceMaxTon, selectedCycleId, onSelectCycle }) {
   const width = 640;
   const height = 220;
   const padL = 34;
@@ -109,13 +109,13 @@ function PayloadCycleChart({ details, ratedTon, tolerancePct, selectedCycleId, o
   const plotW = width - padL - padR;
   const plotH = height - padT - padB;
 
-  const maxTon = Math.max(ratedTon * (1 + tolerancePct / 100), ...details.map((d) => d.loadedTon)) + 8;
+  const maxTon = Math.max(toleranceMaxTon, ...details.map((d) => d.loadedTon)) + 8;
   const barGap = 8;
   const barW = (plotW - barGap * (details.length - 1)) / details.length;
 
   const yAt = (ton) => padT + plotH - (ton / maxTon) * plotH;
-  const upperBoundTon = ratedTon * (1 + tolerancePct / 100);
-  const lowerBoundTon = ratedTon * (1 - tolerancePct / 100);
+  const upperBoundTon = toleranceMaxTon;
+  const lowerBoundTon = toleranceMinTon;
 
   return (
     <div className="rounded-xl bg-[#F4F7F5] p-3">
@@ -239,7 +239,7 @@ export default function PayloadManagement() {
     );
   }
 
-  const analysis = analyzePayloadCycles(payloadCycles, unit.ratedPayloadTon);
+  const analysis = analyzePayloadCycles(payloadCycles, unit.ratedPayloadTon, unit.payloadToleranceMinTon, unit.payloadToleranceMaxTon);
   const complianceMeta = complianceStatusMeta(analysis.complianceScorePct);
 
   function handleSelect(cycleId) {
@@ -302,7 +302,7 @@ export default function PayloadManagement() {
           <div className="min-w-0">
             <p className="text-[#0B3B2D] text-[12.5px] font-semibold leading-tight">
               {analysis.optimalCount} dari {analysis.totalCycles} ritase berada dalam pita toleransi ±
-              {PAYLOAD_TOLERANCE_BAND_PCT}% rated payload.
+              {analysis.toleranceMinTon}–{analysis.toleranceMaxTon} ton (toleransi operasional situs).
             </p>
             <p className="text-[#8FA89A] text-[11px] leading-tight mt-1">
               Pita toleransi adalah asumsi ilustratif praktik umum industri — sesuaikan dengan SOP payload situs.
@@ -316,7 +316,8 @@ export default function PayloadManagement() {
         <PayloadCycleChart
           details={analysis.details}
           ratedTon={analysis.ratedTon}
-          tolerancePct={analysis.tolerancePct}
+          toleranceMinTon={analysis.toleranceMinTon}
+          toleranceMaxTon={analysis.toleranceMaxTon}
           selectedCycleId={selectedCycleId}
           onSelectCycle={handleSelect}
         />

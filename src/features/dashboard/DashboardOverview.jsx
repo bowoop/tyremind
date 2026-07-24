@@ -191,8 +191,10 @@ function TyreHealthMap({ unit }) {
   const order = [
     TyrePosition.FRONT_LEFT,
     TyrePosition.FRONT_RIGHT,
-    TyrePosition.REAR_LEFT,
-    TyrePosition.REAR_RIGHT,
+    TyrePosition.REAR_LEFT_OUTER,
+    TyrePosition.REAR_LEFT_INNER,
+    TyrePosition.REAR_RIGHT_INNER,
+    TyrePosition.REAR_RIGHT_OUTER,
   ];
 
   return (

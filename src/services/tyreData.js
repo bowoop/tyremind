@@ -4,11 +4,18 @@ export const TyreStatus = Object.freeze({
   CRITICAL: "Critical"
 })
 
+// Komatsu HD785-7 punya 6 ban FISIK: 2 depan (single) + 4 belakang
+// (2 pasang dual/paralel di tiap sisi — outer & inner). Sebelumnya
+// project ini cuma memodelkan 4 titik (rear kiri/kanan digabung jadi 1),
+// yang tidak akurat secara fisik — diperbaiki jadi 6 posisi penuh di
+// bawah supaya tyres.length SELALU = jumlah ban fisik sebenarnya.
 export const TyrePosition = Object.freeze({
   FRONT_LEFT: "Front Left",
   FRONT_RIGHT: "Front Right",
-  REAR_LEFT: "Rear Left",
-  REAR_RIGHT: "Rear Right"
+  REAR_LEFT_OUTER: "Rear Left Outer",
+  REAR_LEFT_INNER: "Rear Left Inner",
+  REAR_RIGHT_INNER: "Rear Right Inner",
+  REAR_RIGHT_OUTER: "Rear Right Outer"
 })
 
 // Catatan field eisSensor: data sensor EIS (Electrochemical Impedance
@@ -22,6 +29,10 @@ export const TyrePosition = Object.freeze({
 const tyreFrontLeft = {
   id: "FL-01",
   position: TyrePosition.FRONT_LEFT,
+  axle: "FRONT",
+  // Tekanan minimum resmi axle depan (beban rata-rata saat ini) = 94 PSI
+  // (services/tyreSpecModel.js, getMinRequiredPressurePsi) — 100 PSI
+  // sudah di atas minimum.
   pressurePsi: 100,
   temperatureCelcius: 60,
   materialDegradationPct: 15,
@@ -34,6 +45,7 @@ const tyreFrontLeft = {
 const tyreFrontRight = {
   id: "FR-02",
   position: TyrePosition.FRONT_RIGHT,
+  axle: "FRONT",
   pressurePsi: 98,
   temperatureCelcius: 62,
   materialDegradationPct: 18,
@@ -43,51 +55,101 @@ const tyreFrontRight = {
   eisSensor: { rCtOhm: 436.5, nilaiN: 0.89 }
 }
 
-const tyreRearLeft = {
-  id: "RL-03",
-  position: TyrePosition.REAR_LEFT,
-  pressurePsi: 90,
-  temperatureCelcius: 75,
-  materialDegradationPct: 35,
+const tyreRearLeftOuter = {
+  id: "RLO-03",
+  position: TyrePosition.REAR_LEFT_OUTER,
+  axle: "REAR",
+  // Tekanan minimum resmi axle belakang (beban rata-rata saat ini) = 102
+  // PSI (lihat services/tyreSpecModel.js, getMinRequiredPressurePsi).
+  // 96 PSI = kurang 6 PSI dari minimum → Warning (bukan lagi ambang tetap
+  // sembarang, tapi dibandingkan ke kapasitas beban aktual ban ini).
+  pressurePsi: 96,
+  temperatureCelcius: 76, // <80°C = Good, sesuai zona suhu tervalidasi
+  materialDegradationPct: 32,
   status: TyreStatus.WARNING,
-  healthScore: 65,
-  remainingUsefulLifeKm: 3100,
-  eisSensor: { rCtOhm: 199.5, nilaiN: 0.83 }
+  healthScore: 70,
+  remainingUsefulLifeKm: 3300,
+  eisSensor: { rCtOhm: 215.0, nilaiN: 0.84 }
 }
 
-const tyreRearRight = {
-  id: "RR-04",
-  position: TyrePosition.REAR_RIGHT,
-  pressurePsi: 85,
-  temperatureCelcius: 80,
-  materialDegradationPct: 45,
+// Ban INNER pada dual rear secara fisik lebih panas & lebih cepat aus
+// dibanding OUTER di sisi yang sama — sirkulasi udara pendinginannya
+// lebih terbatas karena posisinya di antara 2 ban lain (fakta umum
+// perawatan ban OTR dual, bukan spekulasi acak).
+const tyreRearLeftInner = {
+  id: "RLI-04",
+  position: TyrePosition.REAR_LEFT_INNER,
+  axle: "REAR",
+  // Minimum resmi rear = 102 PSI. 94 PSI = kurang 8 PSI → Warning.
+  pressurePsi: 94,
+  temperatureCelcius: 85, // zona 80-93°C = Warning (tervalidasi)
+  materialDegradationPct: 38,
+  status: TyreStatus.WARNING,
+  healthScore: 60,
+  remainingUsefulLifeKm: 2900,
+  eisSensor: { rCtOhm: 185.0, nilaiN: 0.82 }
+}
+
+const tyreRearRightInner = {
+  id: "RRI-05",
+  position: TyrePosition.REAR_RIGHT_INNER,
+  axle: "REAR",
+  // Minimum resmi rear = 102 PSI. 78 PSI = kurang 24 PSI → jauh di bawah
+  // minimum, Critical.
+  pressurePsi: 78,
+  temperatureCelcius: 96, // >93°C = Critical (tervalidasi)
+  materialDegradationPct: 48,
   status: TyreStatus.CRITICAL,
-  healthScore: 35,
-  remainingUsefulLifeKm: 1900,
-  eisSensor: { rCtOhm: 125.9, nilaiN: 0.79 }
+  healthScore: 32,
+  remainingUsefulLifeKm: 1750,
+  eisSensor: { rCtOhm: 118.0, nilaiN: 0.78 }
+}
+
+const tyreRearRightOuter = {
+  id: "RRO-06",
+  position: TyrePosition.REAR_RIGHT_OUTER,
+  axle: "REAR",
+  // Minimum resmi rear = 102 PSI. 85 PSI = kurang 17 PSI → Critical
+  // (>=10 PSI defisit, sesuai ambang di services/maintenanceModel.js).
+  pressurePsi: 85,
+  temperatureCelcius: 88, // zona 80-93°C = Warning
+  materialDegradationPct: 42,
+  status: TyreStatus.CRITICAL,
+  healthScore: 38,
+  remainingUsefulLifeKm: 2050,
+  eisSensor: { rCtOhm: 132.0, nilaiN: 0.80 }
 }
 
 export const unitDT001 = {
   unitId: "DT001",
   name: "Dump Truck",
   type: "Komatsu HD785-7",
-  // Rated payload PABRIKAN (bukan asumsi) — 91.7 ton metrik, dibulatkan ke
-  // 91 ton untuk kalkulasi. Sumber: spesifikasi resmi Komatsu HD785-7
-  // (rigid dump truck, rated payload 91.7 t / dump body 40 yd³ struck).
+  // Rated payload PABRIKAN — 91.7 ton metrik. Sumber: manual resmi
+  // Komatsu CEN00136-09 HD785-7 (via "Michelin Tire Database — HD785",
+  // sheet Vehicle_HD785, yang diberikan pengguna).
   // Dipakai sebagai basis Payload Utilization di services/payloadModel.js.
-  ratedPayloadTon: 91,
+  ratedPayloadTon: 91.7,
+  // Rentang toleransi payload operasional 82–100 ton — ASUMSI OPERASIONAL
+  // milik pengguna sendiri (BUKAN spesifikasi resmi Komatsu), tercatat di
+  // sheet Vehicle_HD785. Menggantikan asumsi generik ±10% yang dipakai
+  // sebelumnya di services/payloadModel.js.
+  payloadToleranceMinTon: 82,
+  payloadToleranceMaxTon: 100,
   // Berat kosong unit (unloaded) — spesifikasi resmi Komatsu HD785-7: 72.6 ton.
   // Dipakai bersama ratedPayloadTon untuk menghitung Gross Vehicle Weight
   // (GVW) per kondisi loaded/empty di TKPH — lihat services/maintenanceModel.js.
   emptyWeightTon: 72.6,
-  // HD785-7 punya 6 posisi ban fisik (2 depan + 4 belakang dual), TAPI
-  // tyreData.js MVP ini hanya memodelkan 4 TITIK monitoring (tyres di
-  // bawah) — sisi belakang kiri/kanan mewakili sepasang dual masing-masing.
-  // physicalTyreCount dipisah dari tyres.length supaya kalkulasi TKPH/beban
-  // per ban (di maintenanceModel.js) memakai jumlah ban FISIK yang benar,
-  // bukan jumlah titik monitoring.
-  physicalTyreCount: 6,
   tyreSize: "27.00R49", // ukuran ban standar pabrikan HD785-7
+  tyreQtyFront: 2,
+  tyreQtyRear: 4,
+  // Distribusi beban axle — sumber: manual Komatsu CEN00136-09, via sheet
+  // Vehicle_HD785. Dipakai untuk menghitung beban per ban (kg) secara
+  // TERPISAH untuk axle depan & belakang — lihat services/tyreSpecModel.js
+  // (computeAxleLoadPerTyreKg, computeRealSiteTKPH).
+  frontAxlePercentLoaded: 0.314,
+  rearAxlePercentLoaded: 0.686,
+  frontAxlePercentUnladen: 0.47,
+  rearAxlePercentUnladen: 0.53,
   site: "Main Haul Road",
   segment: "A",
   operator: "Satrio Adhiyatma",
@@ -138,7 +200,7 @@ export const unitDT001 = {
     gpsIntegrationStatus: "Menunggu konfirmasi endpoint API dari tim IT/OT KPP",
     lastGpsSyncLabel: "Belum tersambung — integrasi tahap perencanaan"
   },
-  tyres: [tyreFrontLeft, tyreFrontRight, tyreRearLeft, tyreRearRight]
+  tyres: [tyreFrontLeft, tyreFrontRight, tyreRearLeftOuter, tyreRearLeftInner, tyreRearRightInner, tyreRearRightOuter]
 }
 
 export const fleet = [unitDT001]
