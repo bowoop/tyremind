@@ -190,8 +190,25 @@ function formatTanggalID(isoDate) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
+const INCIDENT_WINDOW_DAYS = 7;
+const INCIDENT_WINDOW_END_DATE = new Date("2026-07-27T00:00:00");
+
+// Filter insiden ke jendela waktu 7 hari terakhir yang berakhir pada
+// tanggal referensi tetap 27 Juli 2026, supaya count di kartu segmen &
+// daftar di modal selalu konsisten dengan dataset yang sudah diset.
+function getRecentIncidents(incidents, windowDays = INCIDENT_WINDOW_DAYS) {
+  const end = new Date(INCIDENT_WINDOW_END_DATE);
+  const cutoff = new Date(end);
+  cutoff.setDate(end.getDate() - windowDays);
+
+  return (incidents ?? []).filter((i) => {
+    const incidentDate = new Date(i.date + "T00:00:00");
+    return incidentDate >= cutoff && incidentDate <= end;
+  });
+}
+
 function IncidentListModal({ segment, onClose }) {
-  const incidents = segment.incidents ?? [];
+  const incidents = getRecentIncidents(segment.incidents);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -209,7 +226,7 @@ function IncidentListModal({ segment, onClose }) {
               Insiden Terkait Ban
             </p>
             <h3 className="text-[#0B3B2D] text-base font-bold tracking-tight">
-              {segment.name} · 30 Hari Terakhir
+              {segment.name} · 7 Hari Terakhir
             </h3>
           </div>
           <button
@@ -273,7 +290,8 @@ function SegmentBadge({ x, y, seg, isSelected, onClick }) {
 
 function SegmentDetailPanel({ segment, onClose, onOpenIncidents }) {
   const meta = ROAD_RISK_META[segment.riskLevel];
-  const hasIncidents = (segment.incidents ?? []).length > 0;
+  const recentIncidents = getRecentIncidents(segment.incidents);
+  const hasIncidents = recentIncidents.length > 0;
 
   return (
     <div className="bg-white rounded-2xl border border-[#E8EDE9] p-5 shadow-sm h-fit">
@@ -316,10 +334,10 @@ function SegmentDetailPanel({ segment, onClose, onOpenIncidents }) {
           onClick={() => onOpenIncidents(segment)}
           className="text-[#C84B31] text-[11px] font-semibold underline decoration-dotted underline-offset-2 hover:text-[#A83B24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C84B31] rounded"
         >
-          {segment.incidentCount30d} insiden terkait ban dalam 30 hari terakhir
+          {recentIncidents.length} insiden terkait ban dalam 7 hari terakhir
         </button>
       ) : (
-        <p className="text-[#1A7A4A] text-[11px] font-semibold">Tidak ada insiden dalam 30 hari terakhir</p>
+        <p className="text-[#1A7A4A] text-[11px] font-semibold">Tidak ada insiden dalam 7 hari terakhir</p>
       )}
     </div>
   );

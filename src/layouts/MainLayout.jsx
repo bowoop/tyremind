@@ -91,67 +91,20 @@ const IconReports = ({ className }) => (
   </svg>
 );
 
-const IconBell = ({ className }) => (
-  <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M10 2C10 2 5.5 4 5.5 9.5V14L3.5 15.5H16.5L14.5 14V9.5C14.5 4 10 2 10 2Z"
-      stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-    <path d="M8 15.5C8 16.6 8.9 17.5 10 17.5C11.1 17.5 12 16.6 12 15.5" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
 const IconChevron = ({ className }) => (
   <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M7 8L10 11L13 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
-// ─────────────────────────────────────────────
-// NAV CONFIG
-// ─────────────────────────────────────────────
-
 const NAV_ITEMS = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    icon: IconDashboard,
-    badge: null,
-  },
-  {
-    id: "tyre-monitoring",
-    label: "Tyre Monitoring",
-    icon: IconTyre,
-    badge: null,
-  },
-  {
-    id: "road",
-    label: "Road Intelligence",
-    icon: IconRoad,
-    badge: null,
-  },
-  {
-    id: "operator",
-    label: "Operator",
-    icon: IconOperator,
-    badge: null,
-  },
-  {
-    id: "payload",
-    label: "Payload Hauler",
-    icon: IconPayload,
-    badge: null,
-  },
-  {
-    id: "ai-insight",
-    label: "AI Insight",
-    icon: IconAI,
-    badge: null,
-  },
-  {
-    id: "reports",
-    label: "Reports",
-    icon: IconReports,
-    badge: null,
-  },
+  { id: "dashboard", label: "Dashboard", icon: IconDashboard, badge: null },
+  { id: "tyre-monitoring", label: "Tyre Monitoring", icon: IconTyre, badge: null },
+  { id: "road", label: "Road Intelligence", icon: IconRoad, badge: null },
+  { id: "operator", label: "Operator", icon: IconOperator, badge: null },
+  { id: "payload", label: "Payload Management", icon: IconPayload, badge: null },
+  { id: "ai-insight", label: "AI Insight", icon: IconAI, badge: null },
+  { id: "reports", label: "Reports", icon: IconReports, badge: null },
 ];
 
 // ─────────────────────────────────────────────
@@ -324,19 +277,6 @@ function TopBar({ activeMenu }) {
 
         {/* Divider */}
         <div className="w-px h-8 bg-[#E0EAE3]" />
-
-        {/* Notification bell */}
-        <button
-          className="relative w-9 h-9 rounded-xl flex items-center justify-center
-            text-[#6B8F7A] hover:bg-[#E8F5EE] hover:text-[#1A7A4A]
-            transition-colors duration-150
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A7A4A]"
-          aria-label="Notifikasi"
-        >
-          <IconBell className="w-[18px] h-[18px]" />
-          {/* Unread dot */}
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#C84B31] ring-2 ring-white" />
-        </button>
       </div>
     </header>
   );

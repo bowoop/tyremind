@@ -47,11 +47,31 @@ const STATUS_META = {
 
 // Ambang batas sensor — dipakai untuk mewarnai tiap baris sensor
 // individual (bisa berbeda dari status keseluruhan ban).
-function pressureStatus(psi) {
-  if (psi < 90) return TyreStatus.CRITICAL;
-  if (psi < 100) return TyreStatus.WARNING;
+//
+// Tekanan front vs rear PUNYA skala berbeda (posisi & beban axle beda),
+// jadi threshold-nya position-aware, bukan satu angka flat untuk semua ban:
+//   Rear  (max 105 PSI): Good 105–102 · Warning 102–94 · Critical <94
+//   Front (max 102 PSI): Good 102–94  · Warning 94–87  · Critical <87
+function pressureStatus(psi, position) {
+  const isFront = position?.startsWith("Front");
+  if (isFront) {
+    if (psi < 87) return TyreStatus.CRITICAL;
+    if (psi < 94) return TyreStatus.WARNING;
+    return TyreStatus.NORMAL;
+  }
+
+  // Rear — maksimal 105 PSI, dengan rentang aman 105–102 PSI.
+  if (psi < 94) return TyreStatus.CRITICAL;
+  if (psi < 102) return TyreStatus.WARNING;
   return TyreStatus.NORMAL;
 }
+
+function pressurePct(psi, position) {
+  const isFront = position?.startsWith("Front");
+  const maxPsi = isFront ? 102 : 105;
+  return (psi / maxPsi) * 100;
+}
+
 function temperatureStatus(celsius) {
   if (celsius > 93) return TyreStatus.CRITICAL;
   if (celsius >= 80) return TyreStatus.WARNING;
@@ -72,13 +92,15 @@ function degradationStatus(pct) {
 function generateTyreAlerts(tyre) {
   const alerts = [];
 
-  const pStatus = pressureStatus(tyre.pressurePsi);
+  const pStatus = pressureStatus(tyre.pressurePsi, tyre.position);
   if (pStatus !== TyreStatus.NORMAL) {
+    const isFront = tyre.position?.startsWith("Front");
+    const normalRange = isFront ? "94–102 PSI" : "102–105 PSI";
     alerts.push({
       id: `${tyre.id}-pressure`,
       type: "Abnormal Pressure",
       severity: pStatus,
-      message: `Tekanan ban tercatat ${tyre.pressurePsi} PSI — di bawah rentang normal 95–105 PSI.`,
+      message: `Tekanan ban tercatat ${tyre.pressurePsi} PSI — di bawah rentang normal ${normalRange}.`,
     });
   }
 
@@ -537,8 +559,8 @@ function TyreDetailPanel({ tyre, onOpenDegradationValidity }) {
         <SensorRow
           label="Tekanan Ban"
           value={`${tyre.pressurePsi} PSI`}
-          pct={(tyre.pressurePsi / 120) * 100}
-          status={pressureStatus(tyre.pressurePsi)}
+          pct={pressurePct(tyre.pressurePsi, tyre.position)}
+          status={pressureStatus(tyre.pressurePsi, tyre.position)}
         />
         <SensorRow
           label="Suhu Permukaan"
