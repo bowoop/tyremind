@@ -41,6 +41,7 @@ import {
   estimateFuelSaving,
   estimateROISummary,
   DOWNTIME_RISK_NOTE,
+  DOWNTIME_REDUCTION_RANGE_PCT,
 } from "../../services/maintenanceModel";
 
 // ─────────────────────────────────────────────
@@ -384,7 +385,11 @@ function MaintenanceRecommendationsSection({ unit, mostDangerousSegment, payload
 // ─────────────────────────────────────────────
 
 function CostRoiSection({ unit, payloadAnalysis, cycleTimeAnalysis }) {
-  const RUL_EXTENSION_PCT = 18; // titik tengah rentang "15–20%" di brief tantangan
+  // Titik tengah rentang "20–25%" — angka dari materi presentasi internal
+  // "Dampak terhadap Produktivitas, Biaya Operasional, dan Keselamatan"
+  // (estimasi skala 100 unit HD785), menggantikan estimasi sebelumnya
+  // (18%, titik tengah brief tantangan "15–20%").
+  const RUL_EXTENSION_PCT = 22.5;
   const tyreSaving = estimateTyreCostSaving(RUL_EXTENSION_PCT, unit);
   const fuelSaving = estimateFuelSaving(payloadAnalysis, cycleTimeAnalysis);
   const roi = estimateROISummary(tyreSaving, fuelSaving, fleet.length);
@@ -434,9 +439,20 @@ function CostRoiSection({ unit, payloadAnalysis, cycleTimeAnalysis }) {
         </div>
       </div>
 
-      <div className="rounded-xl bg-[#FDF3E0] px-4 py-3">
-        <p className="text-[#B8790E] text-[11px] font-bold">Downtime / Biaya Kerusakan</p>
-        <p className="text-[#B8790E]/90 text-[10.5px] mt-1 leading-snug">{DOWNTIME_RISK_NOTE}</p>
+      <div className="rounded-xl bg-[#FDF3E0] p-5">
+        <p className="text-[#B8790E] text-[11px] font-bold uppercase tracking-[0.04em] mb-2">
+          Potensi Penurunan Downtime
+        </p>
+        <p className="text-[#0B3B2D] text-2xl font-bold tracking-tight leading-none mb-1">
+          {DOWNTIME_REDUCTION_RANGE_PCT.minPct}–{DOWNTIME_REDUCTION_RANGE_PCT.maxPct}%
+        </p>
+        <p className="text-[#B8790E]/90 text-[11.5px] leading-snug">
+          Rentang estimasi dari materi presentasi internal (skala 100 unit HD785) — unit lebih siap operasi,
+          bukan hasil kalkulasi dari data biaya perbaikan situs KPP.
+        </p>
+        <p className="text-[#B8790E]/90 text-[10.5px] mt-2 pt-2 border-t border-[#B8790E]/20 leading-snug">
+          {DOWNTIME_RISK_NOTE}
+        </p>
       </div>
 
       {/* CapEx vs OpEx & ROI */}

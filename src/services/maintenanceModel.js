@@ -323,6 +323,13 @@ export const DOWNTIME_RISK_NOTE =
   "overload serta suhu/tekanan abnormal (lihat Rekomendasi Perawatan) mengurangi paparan risiko blown tyre dan " +
   "keretakan frame/vessel — estimasi kuantitatif dapat ditambahkan begitu data downtime/repair cost historis tersedia.";
 
+// Rentang persentase penurunan downtime — BUKAN dihitung dari data operasional situs KPP
+// (masih belum ada data biaya perbaikan/downtime historis, lihat DOWNTIME_RISK_NOTE),
+// melainkan dikutip dari materi presentasi internal "Dampak terhadap Produktivitas, Biaya
+// Operasional, dan Keselamatan" (estimasi skala 100 unit Komatsu HD785). Ditampilkan sebagai
+// referensi kualitatif pendukung, bukan proyeksi Rupiah per unit.
+export const DOWNTIME_REDUCTION_RANGE_PCT = { minPct: 5, maxPct: 30 };
+
 /**
  * Ringkasan CapEx vs OpEx & payback period. unitCount default 1 (fleet
  * MVP saat ini hanya 1 unit DT001) — kalikan sesuai jumlah unit HD785
