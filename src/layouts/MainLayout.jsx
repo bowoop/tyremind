@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardOverview from "../features/dashboard/DashboardOverview"
 import TyreMonitoring from "../features/tyre-monitoring/TyreMonitoring";
 import AiInsight from "../features/ai-insight/AiInsight";
@@ -97,6 +97,32 @@ const IconChevron = ({ className }) => (
   </svg>
 );
 
+// Tombol toggle sidebar — mengikuti bahasa visual "panel kiri" (mis. Claude web):
+// persegi dengan garis vertikal yang memisahkan panel sempit di sisi kiri.
+const IconPanelToggle = ({ className }) => (
+  <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="2.5" y="3.5" width="15" height="13" rx="2.2" stroke="currentColor" strokeWidth="1.6" />
+    <line x1="8" y1="3.5" x2="8" y2="16.5" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+);
+
+// Ikon hamburger — dipakai di TopBar untuk membuka drawer sidebar di layar mobile.
+const IconMenu = ({ className }) => (
+  <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <line x1="3" y1="5.5" x2="17" y2="5.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <line x1="3" y1="14.5" x2="17" y2="14.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+
+// Ikon close (X) — dipakai di drawer sidebar mobile untuk menutup.
+const IconClose = ({ className }) => (
+  <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: IconDashboard, badge: null },
   { id: "tyre-monitoring", label: "Tyre Monitoring", icon: IconTyre, badge: null },
@@ -111,15 +137,17 @@ const NAV_ITEMS = [
 // SIDEBAR NAV ITEM
 // ─────────────────────────────────────────────
 
-function NavItem({ item, isActive, onClick }) {
+function NavItem({ item, isActive, onClick, collapsed }) {
   const Icon = item.icon;
 
   return (
     <button
       onClick={() => onClick(item.id)}
       aria-current={isActive ? "page" : undefined}
+      title={collapsed ? item.label : undefined}
       className={[
-        "group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left",
+        "group relative w-full flex items-center rounded-xl text-left",
+        collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
         "transition-all duration-150 ease-out focus-visible:outline-none",
         "focus-visible:ring-2 focus-visible:ring-[#4ADE80] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B3B2D]",
         isActive
@@ -128,7 +156,7 @@ function NavItem({ item, isActive, onClick }) {
       ].join(" ")}
     >
       {/* Active left-edge indicator */}
-      {isActive && (
+      {isActive && !collapsed && (
         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#4ADE80] rounded-full" />
       )}
 
@@ -140,12 +168,14 @@ function NavItem({ item, isActive, onClick }) {
         ].join(" ")}
       />
 
-      <span className="flex-1 text-[13.5px] font-medium leading-none tracking-[0.01em]">
-        {item.label}
-      </span>
+      {!collapsed && (
+        <span className="flex-1 text-[13.5px] font-medium leading-none tracking-[0.01em] whitespace-nowrap">
+          {item.label}
+        </span>
+      )}
 
       {/* Badge */}
-      {item.badge !== null && (
+      {item.badge !== null && !collapsed && (
         <span
           className={[
             "flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center",
@@ -158,6 +188,25 @@ function NavItem({ item, isActive, onClick }) {
           {item.badge}
         </span>
       )}
+
+      {/* Badge dot ketika collapsed, supaya tetap terlihat ada notifikasi */}
+      {item.badge !== null && collapsed && (
+        <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-[#C84B31]" />
+      )}
+
+      {/* Tooltip saat collapsed */}
+      {collapsed && (
+        <span
+          className={[
+            "pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50",
+            "px-2.5 py-1.5 rounded-lg bg-[#0B3B2D] text-white text-[12px] font-medium whitespace-nowrap",
+            "opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0",
+            "transition-all duration-150 shadow-lg ring-1 ring-black/10",
+          ].join(" ")}
+        >
+          {item.label}
+        </span>
+      )}
     </button>
   );
 }
@@ -166,14 +215,31 @@ function NavItem({ item, isActive, onClick }) {
 // SIDEBAR
 // ─────────────────────────────────────────────
 
-function Sidebar({ activeMenu, onNavChange }) {
+const SIDEBAR_WIDTH_EXPANDED = 220;
+const SIDEBAR_WIDTH_COLLAPSED = 72;
+
+function Sidebar({ activeMenu, onNavChange, collapsed, onToggleCollapsed, variant = "desktop", onCloseMobile }) {
+  const isMobile = variant === "mobile";
+  // Di drawer mobile, sidebar selalu tampil penuh (tidak ada mode "collapsed" ikon-saja) —
+  // yang relevan di layar sempit adalah buka/tutup drawer, bukan lebar sidebar.
+  const effectiveCollapsed = isMobile ? false : collapsed;
+
   return (
     <aside
-      className="flex flex-col w-[220px] min-h-screen bg-[#0B3B2D] flex-shrink-0"
+      className={[
+        "flex flex-col min-h-screen bg-[#0B3B2D] flex-shrink-0 overflow-hidden",
+        isMobile ? "w-[260px] max-w-[80vw] h-full" : "transition-[width] duration-200 ease-out",
+      ].join(" ")}
+      style={isMobile ? undefined : { width: effectiveCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED }}
       aria-label="Navigasi utama"
     >
-      {/* ── LOGO ── */}
-      <div className="flex items-center justify-center px-4 pt-5 pb-4">
+      {/* ── LOGO + TOGGLE ── */}
+      <div
+        className={[
+          "flex items-center pt-5 pb-4",
+          effectiveCollapsed ? "flex-col-reverse gap-3 px-2" : "justify-between px-4",
+        ].join(" ")}
+      >
         {/*
          * Logo resmi TyreMind.
          * Ganti src dengan path asset yang sesuai dengan setup bundler:
@@ -182,29 +248,52 @@ function Sidebar({ activeMenu, onNavChange }) {
          *   - Next  : letakkan di /public lalu src="/logo_tyremind.png"
          * Saat ini menggunakan path relatif sebagai placeholder.
          */}
-        <img
-          src={logoTyreMind}
-          alt="TyreMind"
-          className="h-9 w-auto object-contain"
-        />
+        {!effectiveCollapsed && (
+          <img
+            src={logoTyreMind}
+            alt="TyreMind"
+            className="h-9 w-auto object-contain"
+          />
+        )}
+
+        {/* Tombol toggle: di desktop = collapse/expand, di mobile drawer = tutup */}
+        <button
+          onClick={isMobile ? onCloseMobile : onToggleCollapsed}
+          title={isMobile ? "Tutup menu" : collapsed ? "Buka sidebar" : "Tutup sidebar"}
+          aria-label={isMobile ? "Tutup menu" : collapsed ? "Buka sidebar" : "Tutup sidebar"}
+          aria-expanded={isMobile ? undefined : !collapsed}
+          className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[#6BAF88] hover:text-white hover:bg-[#14543A] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4ADE80]"
+        >
+          {isMobile ? (
+            <IconClose className="w-[18px] h-[18px]" />
+          ) : (
+            <IconPanelToggle className="w-[18px] h-[18px]" />
+          )}
+        </button>
       </div>
 
       {/* ── DIVIDER ── */}
       <div className="mx-4 mb-4 h-px bg-[#14543A]" />
 
       {/* ── NAV SECTION LABEL ── */}
-      <p className="px-4 mb-2 text-[10px] font-semibold tracking-[0.14em] uppercase text-[#4A7A60]">
-        Menu
-      </p>
+      {!effectiveCollapsed && (
+        <p className="px-4 mb-2 text-[10px] font-semibold tracking-[0.14em] uppercase text-[#4A7A60] whitespace-nowrap">
+          Menu
+        </p>
+      )}
 
       {/* ── NAV ITEMS ── */}
-      <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
+      <nav className={["flex-1 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden", effectiveCollapsed ? "px-2" : "px-2"].join(" ")}>
         {NAV_ITEMS.map((item) => (
           <NavItem
             key={item.id}
             item={item}
             isActive={activeMenu === item.id}
-            onClick={onNavChange}
+            onClick={(id) => {
+              onNavChange(id);
+              if (isMobile) onCloseMobile?.();
+            }}
+            collapsed={effectiveCollapsed}
           />
         ))}
       </nav>
@@ -214,20 +303,30 @@ function Sidebar({ activeMenu, onNavChange }) {
 
       {/* ── USER PROFILE ── */}
       <div className="px-3 py-4">
-        <button className="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-[#14543A] transition-colors duration-150 group">
+        <button
+          title={effectiveCollapsed ? "Dispatcher · Main Haul Road" : undefined}
+          className={[
+            "group w-full flex items-center rounded-xl hover:bg-[#14543A] transition-colors duration-150",
+            effectiveCollapsed ? "justify-center py-2" : "gap-2.5 px-2 py-2",
+          ].join(" ")}
+        >
           {/* Avatar */}
           <div className="w-8 h-8 rounded-full bg-[#1A7A4A] flex items-center justify-center flex-shrink-0 ring-2 ring-[#4ADE80]/30">
             <span className="text-white text-[11px] font-bold leading-none">DS</span>
           </div>
-          <div className="flex-1 text-left min-w-0">
-            <p className="text-white text-[12px] font-semibold leading-tight truncate">
-              Dispatcher
-            </p>
-            <p className="text-[#6BAF88] text-[10.5px] leading-tight truncate">
-              Main Haul Road
-            </p>
-          </div>
-          <IconChevron className="w-4 h-4 text-[#4A7A60] group-hover:text-[#A8CCBA] flex-shrink-0 rotate-[-90deg]" />
+          {!effectiveCollapsed && (
+            <>
+              <div className="flex-1 text-left min-w-0">
+                <p className="text-white text-[12px] font-semibold leading-tight truncate">
+                  Dispatcher
+                </p>
+                <p className="text-[#6BAF88] text-[10.5px] leading-tight truncate">
+                  Main Haul Road
+                </p>
+              </div>
+              <IconChevron className="w-4 h-4 text-[#4A7A60] group-hover:text-[#A8CCBA] flex-shrink-0 rotate-[-90deg]" />
+            </>
+          )}
         </button>
       </div>
     </aside>
@@ -238,7 +337,7 @@ function Sidebar({ activeMenu, onNavChange }) {
 // TOP BAR
 // ─────────────────────────────────────────────
 
-function TopBar({ activeMenu }) {
+function TopBar({ activeMenu, onOpenMobileNav }) {
   const item = NAV_ITEMS.find((n) => n.id === activeMenu);
 
   // Format tanggal — lokal ID
@@ -255,10 +354,17 @@ function TopBar({ activeMenu }) {
   });
 
   return (
-    <header className="flex items-center justify-between px-7 py-4 border-b border-[#E8EDE9] bg-white flex-shrink-0">
-      {/* Page title */}
-      <div>
-        <h1 className="text-[#0B3B2D] text-lg font-bold tracking-tight leading-tight">
+    <header className="flex items-center justify-between px-4 sm:px-7 py-4 border-b border-[#E8EDE9] bg-white flex-shrink-0">
+      {/* Page title (+ hamburger di mobile) */}
+      <div className="flex items-center gap-3 min-w-0">
+        <button
+          onClick={onOpenMobileNav}
+          aria-label="Buka menu navigasi"
+          className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-[#0B3B2D] hover:bg-[#F4F7F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A7A4A]"
+        >
+          <IconMenu className="w-5 h-5" />
+        </button>
+        <h1 className="text-[#0B3B2D] text-lg font-bold tracking-tight leading-tight truncate">
           {item?.label}
         </h1>
       </div>
@@ -276,7 +382,7 @@ function TopBar({ activeMenu }) {
         </div>
 
         {/* Divider */}
-        <div className="w-px h-8 bg-[#E0EAE3]" />
+        <div className="w-px h-8 bg-[#E0EAE3] hidden sm:block" />
       </div>
     </header>
   );
@@ -286,19 +392,84 @@ function TopBar({ activeMenu }) {
 // MAIN LAYOUT — root component
 // ─────────────────────────────────────────────
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "tyremind:sidebar-collapsed";
+
 export default function MainLayout() {
   const [activeMenu, setActiveMenu] = useState("dashboard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  // Drawer sidebar khusus layar mobile (< md) — terpisah dari collapsed/expand desktop
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // localStorage tidak tersedia (mis. private mode) — abaikan, state tetap jalan di memori
+      }
+      return next;
+    });
+  }
+
+  // Tutup drawer mobile otomatis kalau layar di-resize ke ukuran desktop (md ke atas),
+  // supaya drawer tidak "nyangkut" kebuka kalau user rotate/resize window.
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 768px)");
+    function handleChange(e) {
+      if (e.matches) setMobileNavOpen(false);
+    }
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F4F7F5] font-sans antialiased">
-      {/* ── SIDEBAR ── */}
-      <Sidebar activeMenu={activeMenu} onNavChange={setActiveMenu} />
+      {/* ── SIDEBAR DESKTOP (md ke atas) ── */}
+      <div className="hidden md:flex">
+        <Sidebar
+          activeMenu={activeMenu}
+          onNavChange={setActiveMenu}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebarCollapsed}
+          variant="desktop"
+        />
+      </div>
+
+      {/* ── BACKDROP + DRAWER SIDEBAR MOBILE (di bawah md) ── */}
+      {mobileNavOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <div
+        className={[
+          "fixed inset-y-0 left-0 z-50 md:hidden transition-transform duration-200 ease-out",
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full",
+        ].join(" ")}
+      >
+        <Sidebar
+          activeMenu={activeMenu}
+          onNavChange={setActiveMenu}
+          variant="mobile"
+          onCloseMobile={() => setMobileNavOpen(false)}
+        />
+      </div>
 
       {/* ── CONTENT AREA ── */}
       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
-        <TopBar activeMenu={activeMenu} />
+        <TopBar activeMenu={activeMenu} onOpenMobileNav={() => setMobileNavOpen(true)} />
 
-        <main className="flex-1 overflow-y-auto p-7" id="main-content">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-7" id="main-content">
           {activeMenu === "dashboard" && <DashboardOverview />}
           {activeMenu === "tyre-monitoring" && <TyreMonitoring />}
           {activeMenu === "ai-insight" && <AiInsight />}
