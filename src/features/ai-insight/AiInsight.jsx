@@ -489,12 +489,11 @@ function CostRoiSection({ unit, payloadAnalysis, cycleTimeAnalysis }) {
         </div>
         <p className="text-white/70 text-[11.5px] leading-relaxed">
           CapEx (sensor kimia EIS + TPMS + node LoRa per unit + setup platform) sepadan dengan penghematan yang
-          dihasilkan — payback period{" "}
+          dihasilkan dengan payback period{" "}
           <strong className="text-white">
             {roi.paybackMonths !== null && roi.paybackMonths < 12 ? "di bawah 1 tahun" : `~${roi.paybackMonths} bulan`}
           </strong>{" "}
-          untuk {roi.unitCount} unit di fleet saat ini. Seluruh angka CapEx/OpEx adalah estimasi ilustratif — lihat
-          services/maintenanceModel.js untuk rincian asumsi per komponen.
+          untuk {roi.unitCount} unit DT. Seluruh angka CapEx/OpEx adalah estimasi.
         </p>
       </div>
     </div>
