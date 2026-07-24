@@ -551,7 +551,7 @@ function CycleTimeSection({ cycles }) {
         <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-1">
           Management Cycle Time Hauler
         </p>
-        <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">Waktu Edar 1 Ritase (Round Trip)</h2>
+        <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">Round Trip 1 Ritase</h2>
         <p className="text-[#6B8F7A] text-[12px] mt-1">
           Queue → Spotting → Loading → Hauling (Loaded) → Dumping → Return (Empty). Dibandingkan dengan target
           waktu per tahap untuk mengidentifikasi bottleneck.
@@ -605,7 +605,7 @@ function CycleTimeSection({ cycles }) {
 
       <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
         <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-3">
-          Detail Waktu Edar per Ritase ({analysis.totalCycles})
+          Detail Round Trip per Ritase ({analysis.totalCycles})
         </p>
         <div className="flex flex-col gap-1">
           {analysis.perCycle.map((cycle) => (
@@ -619,8 +619,7 @@ function CycleTimeSection({ cycles }) {
         <p className="text-[#B8790E]/90 text-[10.5px] mt-1 leading-snug">
           Target waktu per tahap adalah asumsi ilustratif berbasis rentang wajar operasi excavator-HD785, bukan
           SOP/standard time resmi KPP. Potensi ritase tambahan per shift adalah proyeksi linear (asumsi shift{" "}
-          {analysis.shiftMinutes / 60} jam), belum memperhitungkan variasi antrian riil. Lihat
-          services/payloadModel.js untuk detail asumsi.
+          {analysis.shiftMinutes / 60} jam), belum memperhitungkan variasi antrian riil.
         </p>
       </div>
     </div>

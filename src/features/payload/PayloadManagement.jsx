@@ -288,42 +288,64 @@ export default function PayloadManagement() {
         />
       </div>
 
-      {/* ── PAYLOAD COMPLIANCE + CHART ── */}
+      {/* ── PAYLOAD COMPLIANCE + CHART (kiri) & DETAIL RITASE (kanan) ── */}
       <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em]">
-            Payload Compliance Score
-          </p>
-          <Pill meta={complianceMeta} />
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* KIRI — Compliance score, chart, keterangan chart */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em]">
+                Payload Compliance Score
+              </p>
+              <Pill meta={complianceMeta} />
+            </div>
 
-        <div className="flex items-center gap-4 mb-5 pb-5 border-b border-[#EEF3F0]">
-          <CircularScoreGauge score={analysis.complianceScorePct} />
-          <div className="min-w-0">
-            <p className="text-[#0B3B2D] text-[12.5px] font-semibold leading-tight">
-              {analysis.optimalCount} dari {analysis.totalCycles} ritase berada dalam pita toleransi ±
-              {analysis.toleranceMinTon}–{analysis.toleranceMaxTon} ton (toleransi operasional situs).
+            <div className="flex items-center gap-4 mb-5 pb-5 border-b border-[#EEF3F0]">
+              <CircularScoreGauge score={analysis.complianceScorePct} />
+              <div className="min-w-0">
+                <p className="text-[#0B3B2D] text-[12.5px] font-semibold leading-tight">
+                  {analysis.optimalCount} dari {analysis.totalCycles} ritase berada dalam pita toleransi ±
+                  {analysis.toleranceMinTon}–{analysis.toleranceMaxTon} ton (toleransi operasional situs).
+                </p>
+                <p className="text-[#8FA89A] text-[11px] leading-tight mt-1">
+                  Pita toleransi adalah asumsi ilustratif praktik umum industri — sesuaikan dengan SOP payload situs.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-2">
+              Payload per Ritase — Hari Ini
             </p>
-            <p className="text-[#8FA89A] text-[11px] leading-tight mt-1">
-              Pita toleransi adalah asumsi ilustratif praktik umum industri — sesuaikan dengan SOP payload situs.
+            <PayloadCycleChart
+              details={analysis.details}
+              ratedTon={analysis.ratedTon}
+              toleranceMinTon={analysis.toleranceMinTon}
+              toleranceMaxTon={analysis.toleranceMaxTon}
+              selectedCycleId={selectedCycleId}
+              onSelectCycle={handleSelect}
+            />
+            <p className="text-[#8FA89A] text-[10px] mt-2">
+              Klik salah satu batang untuk menyorot ritase yang sama di daftar detail di samping.
             </p>
           </div>
-        </div>
 
-        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-2">
-          Payload per Ritase — Hari Ini
-        </p>
-        <PayloadCycleChart
-          details={analysis.details}
-          ratedTon={analysis.ratedTon}
-          toleranceMinTon={analysis.toleranceMinTon}
-          toleranceMaxTon={analysis.toleranceMaxTon}
-          selectedCycleId={selectedCycleId}
-          onSelectCycle={handleSelect}
-        />
-        <p className="text-[#8FA89A] text-[10px] mt-2">
-          Klik salah satu batang untuk menyorot ritase yang sama di daftar detail di bawah.
-        </p>
+          {/* KANAN — Detail ritase */}
+          <div>
+            <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-3">
+              Detail Ritase ({analysis.totalCycles})
+            </p>
+            <div className="flex flex-col gap-1">
+              {analysis.details.map((detail) => (
+                <CycleRow
+                  key={detail.cycleId}
+                  detail={detail}
+                  isSelected={selectedCycleId === detail.cycleId}
+                  onSelect={handleSelect}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── DAMPAK PRODUKTIVITAS & RISIKO ── */}
@@ -346,23 +368,6 @@ export default function PayloadManagement() {
             Total <strong>{analysis.overloadExcessTon} ton</strong> kelebihan beban dari {analysis.overloadCount}{" "}
             ritase overload — menambah tekanan mekanis pada ban & struktur unit, serta risiko keselamatan kerja.
           </p>
-        </div>
-      </div>
-
-      {/* ── DETAIL RITASE ── */}
-      <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
-        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.06em] mb-3">
-          Detail Ritase ({analysis.totalCycles})
-        </p>
-        <div className="flex flex-col gap-1">
-          {analysis.details.map((detail) => (
-            <CycleRow
-              key={detail.cycleId}
-              detail={detail}
-              isSelected={selectedCycleId === detail.cycleId}
-              onSelect={handleSelect}
-            />
-          ))}
         </div>
       </div>
 
