@@ -14,7 +14,8 @@
  * Lokasi file: src/features/dashboard/DashboardOverview.jsx
  */
 
-import { fleet, TyreStatus, TyrePosition } from "../../services/tyreData";
+import { fleet, payloadCycles, TyreStatus, TyrePosition, TYRE_LIFE_FULL_HOURS } from "../../services/tyreData";
+import { analyzePayloadCycles } from "../../services/payloadModel";
 
 // ─────────────────────────────────────────────
 // STATUS THEME — selaras dengan palet warna MainLayout.jsx
@@ -67,11 +68,11 @@ function computeFleetMetrics(fleetData) {
 
   const minRULTyre = totalTyres
     ? allTyres.reduce((min, t) =>
-        !min || t.remainingUsefulLifeKm < min.remainingUsefulLifeKm ? t : min,
+        !min || t.remainingUsefulLifeHours < min.remainingUsefulLifeHours ? t : min,
         null
       )
     : null;
-  const minRULKm = minRULTyre?.remainingUsefulLifeKm ?? 0;
+  const minRULHours = minRULTyre?.remainingUsefulLifeHours ?? 0;
 
   const alertCounts = allTyres.reduce(
     (acc, t) => {
@@ -102,7 +103,7 @@ function computeFleetMetrics(fleetData) {
     totalTyres,
     activeVehicles,
     avgHealthScore,
-    minRULKm,
+    minRULHours,
     minRULTyre,
     alertCounts,
     fleetAvailabilityPct,
@@ -257,7 +258,7 @@ function TopRiskTyres({ tyres }) {
               {tyre.id}
             </p>
             <p className="text-[#6B8F7A] text-[11px] mt-0.5">
-              RUL {tyre.remainingUsefulLifeKm.toLocaleString("id-ID")} km · {tyre.unitId} · {tyre.position}
+              RUL {tyre.remainingUsefulLifeHours.toLocaleString("id-ID")} jam · {tyre.unitId} · {tyre.position}
             </p>
           </div>
           <StatusPill status={tyre.status} className="flex-shrink-0 ml-3" />
@@ -271,8 +272,11 @@ function TopRiskTyres({ tyres }) {
 // UNIT STATUS CARD — detail status unit (DT001)
 // ─────────────────────────────────────────────
 
-function UnitStatusCard({ unit }) {
-  const rulKm = Math.min(...unit.tyres.map((t) => t.remainingUsefulLifeKm));
+function UnitStatusCard({ unit, payloadAnalysis }) {
+  const rulHours = Math.min(...unit.tyres.map((t) => t.remainingUsefulLifeHours));
+  const avgPayloadTon = payloadAnalysis?.totalCycles
+    ? Math.round((payloadAnalysis.totalTonHauled / payloadAnalysis.totalCycles) * 10) / 10
+    : 0;
   const initials = unit.operator
     .split(" ")
     .map((n) => n[0])
@@ -305,21 +309,21 @@ function UnitStatusCard({ unit }) {
         </div>
         <div>
           <p className="text-[#0B3B2D] text-2xl font-bold leading-none">
-            {rulKm.toLocaleString("id-ID")}
-            <span className="text-sm font-medium text-[#6B8F7A]"> km</span>
+            {rulHours.toLocaleString("id-ID")}
+            <span className="text-sm font-medium text-[#6B8F7A]"> jam</span>
           </p>
           <p className="text-[#6B8F7A] text-[10.5px] mt-1.5">Remaining Useful Life</p>
         </div>
         <div>
           <p className="text-[#0B3B2D] text-2xl font-bold leading-none">
-            {unit.operationalMetrics.averagePayloadTon}
+            {avgPayloadTon}
             <span className="text-sm font-medium text-[#6B8F7A]"> Ton</span>
           </p>
           <p className="text-[#6B8F7A] text-[10.5px] mt-1.5">Avg. Payload</p>
         </div>
         <div>
           <p className="text-[#0B3B2D] text-2xl font-bold leading-none">
-            {unit.operationalMetrics.overloadFrequencyPct}%
+            {payloadAnalysis?.overloadFreqPct ?? 0}%
           </p>
           <p className="text-[#6B8F7A] text-[10.5px] mt-1.5">Overload Frequency</p>
         </div>
@@ -351,7 +355,7 @@ export default function DashboardOverview() {
     totalTyres,
     activeVehicles,
     avgHealthScore,
-    minRULKm,
+    minRULHours,
     minRULTyre,
     alertCounts,
     fleetAvailabilityPct,
@@ -360,6 +364,14 @@ export default function DashboardOverview() {
   } = computeFleetMetrics(fleet);
 
   const primaryUnit = fleet.find((u) => u.unitId === "DT001") ?? fleet[0];
+  const payloadAnalysis = primaryUnit
+    ? analyzePayloadCycles(
+        payloadCycles,
+        primaryUnit.ratedPayloadTon,
+        primaryUnit.payloadToleranceMinTon,
+        primaryUnit.payloadToleranceMaxTon
+      )
+    : null;
   const avgScoreStatus = scoreToStatus(avgHealthScore);
 
   if (!primaryUnit) {
@@ -408,15 +420,15 @@ export default function DashboardOverview() {
         <MetricCard label="Remaining Useful Life">
           <div className="flex items-end gap-1.5 mb-3">
             <span className="text-[#0B3B2D] text-3xl font-bold tracking-tight">
-              {minRULKm.toLocaleString("id-ID")}
+              {minRULHours.toLocaleString("id-ID")}
             </span>
-            <span className="text-[#6B8F7A] text-xs font-medium mb-1">KM</span>
+            <span className="text-[#6B8F7A] text-xs font-medium mb-1">JAM</span>
           </div>
           <div className="h-1.5 w-full bg-[#EDF3EF] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full"
               style={{
-                width: `${Math.min(100, (minRULKm / 5000) * 100)}%`,
+                width: `${Math.min(100, (minRULHours / TYRE_LIFE_FULL_HOURS) * 100)}%`,
                 backgroundColor: STATUS_META[minRULTyre?.status ?? TyreStatus.NORMAL].solid,
               }}
             />
@@ -424,25 +436,31 @@ export default function DashboardOverview() {
           <p className="text-[#6B8F7A] text-[10.5px] mt-2">Ban dengan sisa umur terendah</p>
         </MetricCard>
 
-        <MetricCard label="Alerts">
-          <div className="flex items-center justify-between">
+        <MetricCard label="Payload KPI">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[#C84B31] text-xl font-bold leading-none">
-                {alertCounts.critical}
+              <p className="text-[#0B3B2D] text-xl font-bold leading-none">
+                {payloadAnalysis?.totalTonHauled ?? 0}
               </p>
-              <p className="text-[#6B8F7A] text-[10px] mt-1">Critical</p>
+              <p className="text-[#6B8F7A] text-[10px] mt-1">Ton Hauled</p>
             </div>
             <div>
-              <p className="text-[#E0A526] text-xl font-bold leading-none">
-                {alertCounts.warning}
+              <p className="text-[#0B3B2D] text-xl font-bold leading-none">
+                {payloadAnalysis?.avgUtilizationPct ?? 0}%
               </p>
-              <p className="text-[#6B8F7A] text-[10px] mt-1">Warning</p>
+              <p className="text-[#6B8F7A] text-[10px] mt-1">Avg. Utilization</p>
             </div>
             <div>
-              <p className="text-[#3B82C4] text-xl font-bold leading-none">
-                {alertCounts.info}
+              <p className="text-[#0B3B2D] text-xl font-bold leading-none">
+                {payloadAnalysis?.complianceScorePct ?? 0}%
               </p>
-              <p className="text-[#6B8F7A] text-[10px] mt-1">Info</p>
+              <p className="text-[#6B8F7A] text-[10px] mt-1">Compliance</p>
+            </div>
+            <div>
+              <p className="text-[#0B3B2D] text-xl font-bold leading-none">
+                {payloadAnalysis?.overloadCount ?? 0}
+              </p>
+              <p className="text-[#6B8F7A] text-[10px] mt-1">Overload Trips</p>
             </div>
           </div>
         </MetricCard>
@@ -484,7 +502,7 @@ export default function DashboardOverview() {
       </div>
 
       {/* ── ROW 4 — STATUS UNIT DT001 ── */}
-      <UnitStatusCard unit={primaryUnit} />
+      <UnitStatusCard unit={primaryUnit} payloadAnalysis={payloadAnalysis} />
     </div>
   );
 }

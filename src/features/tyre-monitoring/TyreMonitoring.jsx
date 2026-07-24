@@ -526,8 +526,8 @@ function TyreDetailPanel({ tyre, onOpenDegradationValidity }) {
         <CircularScoreGauge score={tyre.healthScore} size={92} strokeWidth={10} />
         <div>
           <p className="text-[#0B3B2D] text-2xl font-bold leading-none">
-            {tyre.remainingUsefulLifeKm.toLocaleString("id-ID")}{" "}
-            <span className="text-sm font-medium text-[#6B8F7A]">km</span>
+            {tyre.remainingUsefulLifeHours.toLocaleString("id-ID")}{" "}
+            <span className="text-sm font-medium text-[#6B8F7A]">jam</span>
           </p>
           <p className="text-[#6B8F7A] text-[11px] mt-1.5">Remaining Useful Life</p>
         </div>
@@ -582,7 +582,7 @@ function TyreListRow({ tyre, isSelected, onSelect }) {
             {tyre.id} · {tyre.position}
           </p>
           <p className="text-[#6B8F7A] text-[11px] mt-0.5 truncate">
-            RUL {tyre.remainingUsefulLifeKm.toLocaleString("id-ID")} km · {tyre.pressurePsi} PSI ·{" "}
+            RUL {tyre.remainingUsefulLifeHours.toLocaleString("id-ID")} jam · {tyre.pressurePsi} PSI ·{" "}
             {tyre.temperatureCelcius}°C
           </p>
         </div>

@@ -4,6 +4,19 @@ export const TyreStatus = Object.freeze({
   CRITICAL: "Critical"
 })
 
+// ── SATUAN REMAINING USEFUL LIFE (RUL): JAM OPERASIONAL, bukan KM ──
+// Sebelumnya RUL per-ban (remainingUsefulLifeKm) dalam km, dibandingkan ke
+// jarak tempuh harian (averageDailyDistanceKm) untuk estimasi hari tersisa.
+// Diubah jadi remainingUsefulLifeHours (jam operasional unit) karena ini
+// basis yang lebih umum dipakai industri OTR untuk umur pakai ban (align
+// dengan TKPH yang juga per-jam, bukan per-km) dan supaya tidak tercampur
+// dengan jarak tempuh yang datanya dipakai untuk hal lain (payload/TKPH/
+// cycle time). 100% umur pakai = TYRE_LIFE_FULL_HOURS di bawah — ASUMSI
+// ilustratif untuk ban 27.00R49 compound B4 di haul road tambang batubara,
+// GANTI dengan angka aktual dari data historis penggantian ban situs KPP
+// begitu tersedia.
+export const TYRE_LIFE_FULL_HOURS = 5000;
+
 // Komatsu HD785-7 punya 6 ban FISIK: 2 depan (single) + 4 belakang
 // (2 pasang dual/paralel di tiap sisi — outer & inner). Sebelumnya
 // project ini cuma memodelkan 4 titik (rear kiri/kanan digabung jadi 1),
@@ -38,7 +51,7 @@ const tyreFrontLeft = {
   materialDegradationPct: 15,
   status: TyreStatus.NORMAL,
   healthScore: 90,
-  remainingUsefulLifeKm: 4800,
+  remainingUsefulLifeHours: 4800,
   eisSensor: { rCtOhm: 501.2, nilaiN: 0.90 }
 }
 
@@ -51,7 +64,7 @@ const tyreFrontRight = {
   materialDegradationPct: 18,
   status: TyreStatus.NORMAL,
   healthScore: 88,
-  remainingUsefulLifeKm: 4600,
+  remainingUsefulLifeHours: 4600,
   eisSensor: { rCtOhm: 436.5, nilaiN: 0.89 }
 }
 
@@ -68,7 +81,7 @@ const tyreRearLeftOuter = {
   materialDegradationPct: 32,
   status: TyreStatus.WARNING,
   healthScore: 70,
-  remainingUsefulLifeKm: 3300,
+  remainingUsefulLifeHours: 3300,
   eisSensor: { rCtOhm: 215.0, nilaiN: 0.84 }
 }
 
@@ -86,7 +99,7 @@ const tyreRearLeftInner = {
   materialDegradationPct: 38,
   status: TyreStatus.WARNING,
   healthScore: 60,
-  remainingUsefulLifeKm: 2900,
+  remainingUsefulLifeHours: 2900,
   eisSensor: { rCtOhm: 185.0, nilaiN: 0.82 }
 }
 
@@ -101,7 +114,7 @@ const tyreRearRightInner = {
   materialDegradationPct: 48,
   status: TyreStatus.CRITICAL,
   healthScore: 32,
-  remainingUsefulLifeKm: 1750,
+  remainingUsefulLifeHours: 1750,
   eisSensor: { rCtOhm: 118.0, nilaiN: 0.78 }
 }
 
@@ -116,7 +129,7 @@ const tyreRearRightOuter = {
   materialDegradationPct: 42,
   status: TyreStatus.CRITICAL,
   healthScore: 38,
-  remainingUsefulLifeKm: 2050,
+  remainingUsefulLifeHours: 2050,
   eisSensor: { rCtOhm: 132.0, nilaiN: 0.80 }
 }
 
@@ -159,7 +172,19 @@ export const unitDT001 = {
   operationalMetrics: {
     averagePayloadTon: 45,
     overloadFrequencyPct: 12,
-    // ── SUMBER DATA JARAK TEMPUH (untuk RUL dalam km) ──
+    // ── SUMBER DATA JAM OPERASIONAL (untuk RUL dalam jam) ──
+    // Tidak butuh sensor tambahan — jam operasional (engine hour meter)
+    // sudah tersedia bawaan di ECU unit dan ada di CAN bus (J1939, PGN
+    // 65253 Engine Total Hours of Operation), ditarik via edge gateway
+    // yang sama dengan payload/jarak, dikirim lewat LoRa. Angka 10 jam/hari
+    // di bawah selaras dengan asumsi 1 shift (shiftMinutes = 600 di
+    // services/payloadModel.js) — ASUMSI, ganti dengan rata-rata jam
+    // operasional aktual unit begitu data historis situs tersedia.
+    averageDailyOperatingHours: 10,
+    operatingHoursDataSource: "Engine Hour Meter (ECU, via CAN bus J1939 PGN 65253)",
+    operatingHoursIntegrationPath: "CAN Bus (J1939) → Edge Gateway → LoRa → TyreMind",
+    // ── SUMBER DATA JARAK TEMPUH (dipakai untuk payload/TKPH/cycle time,
+    // BUKAN lagi basis RUL — lihat catatan di atas) ──
     // Tidak butuh sensor tambahan — truk sudah punya ABS wheel speed
     // sensor per roda (untuk sistem pengereman) yang datanya juga ada
     // di CAN bus (J1939, PGN 65248 Vehicle Distance). Data ditarik via
@@ -206,15 +231,16 @@ export const unitDT001 = {
 export const fleet = [unitDT001]
 
 // ─────────────────────────────────────────────
-// HELPER — estimasi RUL dalam hari, dari remainingUsefulLifeKm (per-ban)
-// dan averageDailyDistanceKm (per-unit). Dipusatkan di sini supaya semua
-// halaman (Dashboard, Tyre Monitoring, AI Insight) pakai formula yang
-// sama persis — hindari duplikasi & drift angka antar halaman.
+// HELPER — estimasi RUL dalam hari, dari remainingUsefulLifeHours (per-ban,
+// jam operasional) dan averageDailyOperatingHours (per-unit, jam/hari).
+// Dipusatkan di sini supaya semua halaman (Dashboard, Tyre Monitoring, AI
+// Insight) pakai formula yang sama persis — hindari duplikasi & drift
+// angka antar halaman.
 // ─────────────────────────────────────────────
 
 export function estimateTyreRulDays(tyre, unit) {
-  const dailyKm = unit?.operationalMetrics?.averageDailyDistanceKm || 1;
-  return Math.round(tyre.remainingUsefulLifeKm / dailyKm);
+  const dailyOperatingHours = unit?.operationalMetrics?.averageDailyOperatingHours || 1;
+  return Math.round(tyre.remainingUsefulLifeHours / dailyOperatingHours);
 }
 
 // ─────────────────────────────────────────────

@@ -230,10 +230,6 @@ function PayloadIntegrationCard({ unit }) {
           <span className="text-[#0B3B2D] text-[12.5px] font-bold text-right">{metrics.payloadDataSource}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[#6B8F7A] text-[11px] font-semibold">Jalur Integrasi</span>
-          <span className="text-[#0B3B2D] text-[12px] font-medium text-right">{metrics.payloadIntegrationPath}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
           <span className="text-[#6B8F7A] text-[11px] font-semibold">Sensor ID</span>
           <span className="text-[#0B3B2D] text-[12.5px] font-bold">{metrics.payloadSensorId}</span>
         </div>

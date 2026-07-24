@@ -263,14 +263,15 @@ export function recommendFrameVesselInspection(payloadAnalysis) {
 
 /**
  * Estimasi penghematan biaya ban dari perpanjangan umur pakai (RUL) X%.
- * Siklus penggantian "sebelum" dihitung dari RUL rata-rata & jarak tempuh
- * harian unit yang SUDAH ADA di tyreData.js — bukan asumsi baru. Proyeksi
- * "sesudah" adalah pendekatan linear sederhana (lihat catatan metodologi).
+ * Siklus penggantian "sebelum" dihitung dari RUL rata-rata (jam
+ * operasional) & rata-rata jam operasional harian unit yang SUDAH ADA di
+ * tyreData.js — bukan asumsi baru. Proyeksi "sesudah" adalah pendekatan
+ * linear sederhana (lihat catatan metodologi).
  */
 export function estimateTyreCostSaving(rulExtensionPct, unit, assumptions = COST_ASSUMPTIONS) {
-  const avgRulKm = unit.tyres.reduce((s, t) => s + t.remainingUsefulLifeKm, 0) / unit.tyres.length;
-  const dailyKm = unit.operationalMetrics.averageDailyDistanceKm;
-  const tyreLifeDaysBefore = avgRulKm / dailyKm;
+  const avgRulHours = unit.tyres.reduce((s, t) => s + t.remainingUsefulLifeHours, 0) / unit.tyres.length;
+  const dailyOperatingHours = unit.operationalMetrics.averageDailyOperatingHours;
+  const tyreLifeDaysBefore = avgRulHours / dailyOperatingHours;
   const tyreCount = unit.tyres.length;
 
   const replacementsPerYearBefore = (365 / tyreLifeDaysBefore) * tyreCount;

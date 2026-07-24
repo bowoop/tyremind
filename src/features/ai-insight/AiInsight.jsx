@@ -5,7 +5,7 @@
  * Menampilkan AI Predictive Insight untuk ban paling kritis pada unit DT001:
  * - Skor risiko blowout (health score + kimia/termal + overload muatan +
  *   kondisi jalan — lihat computeBlowoutRisk())
- * - Prediksi jendela waktu kegagalan (dari remainingUsefulLifeKm / averageDailyDistanceKm)
+ * - Prediksi jendela waktu kegagalan (dari remainingUsefulLifeHours / averageDailyOperatingHours)
  * - Breakdown 4 faktor kontribusi, seluruhnya dari data real:
  *   degradasi kimia, suhu/tekanan, overload muatan, kondisi jalan tambang
  * - Rekomendasi tindakan spesifik dari AI
@@ -29,7 +29,7 @@
  */
 
 import { useState } from "react";
-import { fleet, TyreStatus, roadSegments, payloadCycles, estimateTyreRulDays } from "../../services/tyreData";
+import { fleet, TyreStatus, roadSegments, payloadCycles, estimateTyreRulDays, TYRE_LIFE_FULL_HOURS } from "../../services/tyreData";
 import { analyzePayloadCycles, analyzeCycleTimeForCycles } from "../../services/payloadModel";
 import {
   computeTKPHFromCycles,
@@ -190,7 +190,7 @@ function RepairModule({ unit, targetTyre, healthiestTyre }) {
           </p>
           <p className="text-[#0B3B2D] text-[13px] font-bold leading-snug">{formatDateID(recommendedDate)}</p>
           <p className="text-[#8FA89A] text-[10.5px] mt-1">
-            Dijadwalkan {bufferDays} hari sebelum estimasi RUL habis (sisa {targetTyre.remainingUsefulLifeKm.toLocaleString("id-ID")} km saat ini) sebagai margin aman.
+            Dijadwalkan {bufferDays} hari sebelum estimasi RUL habis (sisa {targetTyre.remainingUsefulLifeHours.toLocaleString("id-ID")} jam saat ini) sebagai margin aman.
           </p>
         </div>
       </div>
@@ -513,7 +513,14 @@ export default function AiInsight() {
 
   const riskScore = computeBlowoutRisk(criticalTyre, unit, roadRiskScore);
   const riskLevel = RISK_META[riskLevelFromScore(riskScore)];
-  const remainingKm = criticalTyre.remainingUsefulLifeKm;
+  const remainingHours = criticalTyre.remainingUsefulLifeHours;
+  const remainingKm = Math.max(
+    0,
+    Math.round(
+      (remainingHours / Math.max(1, unit.operationalMetrics.averageDailyOperatingHours || 1)) *
+        Math.max(1, unit.operationalMetrics.averageDailyDistanceKm || 0)
+    )
+  );
   const isUrgent = riskScore >= 60;
 
   const payloadAnalysis = analyzePayloadCycles(payloadCycles, unit.ratedPayloadTon, unit.payloadToleranceMinTon, unit.payloadToleranceMaxTon);
@@ -555,7 +562,7 @@ export default function AiInsight() {
             />
           </div>
           <p className="text-[#6B8F7A] text-[11px]">
-            Probabilitas kegagalan ban dalam sisa {remainingKm.toLocaleString("id-ID")} km pemakaian ke depan
+            Probabilitas kegagalan ban dalam sisa {remainingHours.toLocaleString("id-ID")} jam operasional ke depan
             jika kondisi saat ini berlanjut tanpa intervensi.
           </p>
         </div>
@@ -566,20 +573,20 @@ export default function AiInsight() {
           </p>
           <div className="flex items-end gap-1.5 mb-3">
             <span className="text-[#0B3B2D] text-4xl font-bold tracking-tight leading-none">
-              {remainingKm.toLocaleString("id-ID")}
+              {remainingHours.toLocaleString("id-ID")}
             </span>
-            <span className="text-[#6B8F7A] text-sm font-medium mb-1">km lagi</span>
+            <span className="text-[#6B8F7A] text-sm font-medium mb-1">jam lagi</span>
           </div>
           <div className="h-2 w-full bg-[#EDF3EF] rounded-full overflow-hidden mb-2">
             <div
               className="h-full rounded-full bg-[#C84B31]"
-              style={{ width: `${Math.min(100, (remainingKm / 5000) * 100)}%` }}
+              style={{ width: `${Math.min(100, (remainingHours / TYRE_LIFE_FULL_HOURS) * 100)}%` }}
             />
           </div>
           <p className="text-[#6B8F7A] text-[11px]">
-            Estimasi dari Remaining Useful Life ban {criticalTyre.id} — {remainingKm.toLocaleString("id-ID")} km
-            jarak tempuh tersisa (setara ~{estimateTyreRulDays(criticalTyre, unit)} hari pada rata-rata{" "}
-            {unit.operationalMetrics.averageDailyDistanceKm} km/hari, hanya sebagai gambaran waktu).
+            Estimasi dari Remaining Useful Life ban {criticalTyre.id} — {remainingHours.toLocaleString("id-ID")} jam
+            operasional tersisa (setara ~{estimateTyreRulDays(criticalTyre, unit)} hari pada rata-rata{" "}
+            {unit.operationalMetrics.averageDailyOperatingHours} jam operasional/hari, hanya sebagai gambaran waktu).
           </p>
         </div>
       </div>
@@ -658,7 +665,7 @@ export default function AiInsight() {
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold px-3 py-1.5 rounded-full bg-[#C84B31] text-white">
-            Ganti ban sebelum {remainingKm.toLocaleString("id-ID")} km
+            Ganti ban sebelum {remainingHours.toLocaleString("id-ID")} jam operasional
           </span>
           <span className="text-[11px] font-bold px-3 py-1.5 rounded-full bg-white/10 text-white">
             Kurangi beban muatan sementara
