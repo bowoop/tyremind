@@ -328,7 +328,7 @@ export const DOWNTIME_RISK_NOTE =
 // melainkan dikutip dari materi presentasi internal "Dampak terhadap Produktivitas, Biaya
 // Operasional, dan Keselamatan" (estimasi skala 100 unit Komatsu HD785). Ditampilkan sebagai
 // referensi kualitatif pendukung, bukan proyeksi Rupiah per unit.
-export const DOWNTIME_REDUCTION_RANGE_PCT = { minPct: 5, maxPct: 30 };
+export const DOWNTIME_REDUCTION_RANGE_PCT = { minPct: 15, maxPct: 30 };
 
 /**
  * Ringkasan CapEx vs OpEx & payback period. unitCount default 1 (fleet
