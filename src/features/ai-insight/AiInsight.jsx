@@ -501,10 +501,46 @@ function CostRoiSection({ unit, payloadAnalysis, cycleTimeAnalysis }) {
 }
 
 // ─────────────────────────────────────────────
+// TAB NAVIGATION — memecah halaman jadi 3 alur kerja:
+// juri/engineer bisa langsung lompat ke bagian yang relevan tanpa
+// scroll panjang lintas topik yang tidak berkaitan.
+// ─────────────────────────────────────────────
+
+const TABS = [
+  { id: "risk", label: "Risk & Rekomendasi", shortLabel: "Risk" },
+  { id: "maintenance", label: "Rencana Perawatan", shortLabel: "Perawatan" },
+  { id: "cost", label: "Biaya & ROI", shortLabel: "Biaya" },
+];
+
+function TabNav({ active, onChange }) {
+  return (
+    <div className="bg-white rounded-2xl border border-[#E8EDE9] p-1.5 shadow-sm flex items-center gap-1">
+      {TABS.map((tab) => {
+        const isActive = tab.id === active;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            className={[
+              "relative flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-[12.5px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4ADE80] focus-visible:ring-offset-1",
+              isActive ? "bg-[#0B3B2D] text-white" : "text-[#6B8F7A] hover:bg-[#F4F7F5]",
+            ].join(" ")}
+          >
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.shortLabel}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // AI INSIGHT — root component
 // ─────────────────────────────────────────────
 
 export default function AiInsight() {
+  const [activeTab, setActiveTab] = useState("risk");
   const unit = fleet.find((u) => u.unitId === "DT001") ?? fleet[0];
 
   const criticalTyre = unit?.tyres.reduce(
@@ -560,6 +596,14 @@ export default function AiInsight() {
         <StatusPill meta={STATUS_META[criticalTyre.status]} />
       </div>
 
+      {/* ── TAB NAV ── */}
+      <TabNav active={activeTab} onChange={setActiveTab} />
+
+      {/* ══════════════════════════════════════════
+          TAB: RISK & REKOMENDASI
+          ══════════════════════════════════════════ */}
+      {activeTab === "risk" && (
+      <>
       {/* ── RISK SCORE & PREDIKSI WAKTU ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
@@ -695,17 +739,27 @@ export default function AiInsight() {
       {healthiestTyre && (
         <RepairModule unit={unit} targetTyre={criticalTyre} healthiestTyre={healthiestTyre} />
       )}
+      </>
+      )}
 
-      {/* ── REKOMENDASI STRATEGI PERAWATAN — lintas modul (tyres + road + payload + cycle time) ── */}
-      <MaintenanceRecommendationsSection
-        unit={unit}
-        mostDangerousSegment={mostDangerousSegment}
-        payloadAnalysis={payloadAnalysis}
-        cycleTimeAnalysis={cycleTimeAnalysis}
-      />
+      {/* ══════════════════════════════════════════
+          TAB: RENCANA PERAWATAN
+          ══════════════════════════════════════════ */}
+      {activeTab === "maintenance" && (
+        <MaintenanceRecommendationsSection
+          unit={unit}
+          mostDangerousSegment={mostDangerousSegment}
+          payloadAnalysis={payloadAnalysis}
+          cycleTimeAnalysis={cycleTimeAnalysis}
+        />
+      )}
 
-      {/* ── ANALISIS BIAYA & ROI ── */}
-      <CostRoiSection unit={unit} payloadAnalysis={payloadAnalysis} cycleTimeAnalysis={cycleTimeAnalysis} />
+      {/* ══════════════════════════════════════════
+          TAB: BIAYA & ROI
+          ══════════════════════════════════════════ */}
+      {activeTab === "cost" && (
+        <CostRoiSection unit={unit} payloadAnalysis={payloadAnalysis} cycleTimeAnalysis={cycleTimeAnalysis} />
+      )}
     </div>
   );
 }
