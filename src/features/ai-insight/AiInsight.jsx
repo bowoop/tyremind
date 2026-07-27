@@ -657,15 +657,26 @@ export default function AiInsight() {
           <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-1">
             AI Predictive Insight
           </p>
-          <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">
-            {unit.name} <span className="text-[#6B8F7A] font-medium text-sm">({unit.unitId})</span> — Ban{" "}
-            {selectedTyre.id}
-          </h2>
-          <p className="text-[#6B8F7A] text-[12px] mt-1">
-            {selectedTyre.position} · {unit.site}
-          </p>
+          {activeTab === "risk" ? (
+            <>
+              <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">
+                {unit.name} <span className="text-[#6B8F7A] font-medium text-sm">({unit.unitId})</span> — Ban{" "}
+                {selectedTyre.id}
+              </h2>
+              <p className="text-[#6B8F7A] text-[12px] mt-1">
+                {selectedTyre.position} · {unit.site}
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">
+                {unit.name} <span className="text-[#6B8F7A] font-medium text-sm">({unit.unitId})</span>
+              </h2>
+              <p className="text-[#6B8F7A] text-[12px] mt-1">{unit.site}</p>
+            </>
+          )}
         </div>
-        <StatusPill meta={STATUS_META[selectedTyre.status]} />
+        {activeTab === "risk" && <StatusPill meta={STATUS_META[selectedTyre.status]} />}
       </div>
 
       {/* ── TAB NAV ── */}
