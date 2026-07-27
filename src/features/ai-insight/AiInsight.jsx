@@ -323,8 +323,7 @@ function MaintenanceRecommendationsSection({ unit, mostDangerousSegment, payload
         </p>
         <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">Predictive Tyre Maintenance</h2>
         <p className="text-[#6B8F7A] text-[12px] mt-1">
-          Rotasi ban berbasis keausan & Real Site TKPH (Ton-Kilometer per Hour, formula resmi Michelin) — bukan
-          sekadar jam kerja unit.
+          Rotasi ban berbasis keausan & Real Site TKPH (Ton-Kilometer per Hour, formula resmi Michelin) 
         </p>
       </div>
 
@@ -769,7 +768,7 @@ export default function AiInsight() {
           <p className="text-[#6B8F7A] text-[11px]">
             Estimasi dari Remaining Useful Life ban {selectedTyre.id} — {remainingHours.toLocaleString("id-ID")} jam
             operasional tersisa (setara ~{estimateTyreRulDays(selectedTyre, unit)} hari pada rata-rata{" "}
-            {unit.operationalMetrics.averageDailyOperatingHours} jam operasional/hari, hanya sebagai gambaran waktu).
+            {unit.operationalMetrics.averageDailyOperatingHours} jam operasional/hari).
           </p>
         </div>
       </div>
@@ -780,7 +779,7 @@ export default function AiInsight() {
           Faktor Kontribusi Risiko
         </p>
         <p className="text-[#8FA89A] text-[11px] mb-4">
-          5 faktor di bawah ini membentuk Skor Risiko Blowout — lihat formula di computeBlowoutRisk()
+          5 faktor di bawah ini membentuk Skor Risiko Blowout
         </p>
 
         <div className="flex flex-col gap-4">
@@ -820,7 +819,7 @@ export default function AiInsight() {
             value={100 - drivingAnalysis.overallScore}
             valueLabel={`${drivingAnalysis.overallScore}/100 skor mengemudi`}
             colorStatus={riskStatusFromValue(100 - drivingAnalysis.overallScore, 40, 20)}
-            sourceNote={`${drivingAnalysis.harshBrakingEvents.length} harsh braking, ${drivingAnalysis.harshAccelerationEvents.length} harsh acceleration, ${drivingAnalysis.overspeedSegments.length} segmen overspeed (7 hari terakhir, operator ${driverBehavior.operatorName}) — dari services/drivingBehaviorModel.js, sama seperti yang ditampilkan di modul Operator.`}
+            sourceNote={`${drivingAnalysis.harshBrakingEvents.length} harsh braking, ${drivingAnalysis.harshAccelerationEvents.length} harsh acceleration, ${drivingAnalysis.overspeedSegments.length} segmen overspeed (7 hari terakhir, operator ${driverBehavior.operatorName})`}
           />
         </div>
       </div>

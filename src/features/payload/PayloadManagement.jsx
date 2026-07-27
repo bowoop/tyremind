@@ -308,7 +308,7 @@ export default function PayloadManagement() {
                   {analysis.toleranceMinTon}–{analysis.toleranceMaxTon} ton (toleransi operasional situs).
                 </p>
                 <p className="text-[#8FA89A] text-[11px] leading-tight mt-1">
-                  Pita toleransi adalah asumsi ilustratif praktik umum industri — sesuaikan dengan SOP payload situs.
+                  Pita toleransi adalah asumsi ilustratif praktik umum industri
                 </p>
               </div>
             </div>
@@ -373,8 +373,7 @@ export default function PayloadManagement() {
         <p className="text-[#B8790E] text-[11px] font-bold">Catatan metodologi</p>
         <p className="text-[#B8790E]/90 text-[10.5px] mt-1 leading-snug">
           Estimasi ritase tambahan adalah proyeksi linear sederhana (ton hilang ÷ rated payload), belum
-          memperhitungkan cycle time/jarak aktual per ritase. Belum ada estimasi biaya (BBM, maintenance) karena
-          data unit-cost belum terintegrasi.
+          memperhitungkan cycle time/jarak aktual per ritase. 
         </p>
       </div>
     </div>
