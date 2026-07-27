@@ -67,7 +67,7 @@ export const TEMP_CRITICAL_C = 93;
 export const COST_ASSUMPTIONS = {
   // Referensi listing ban OTR 27.00R49 di marketplace alat berat Indonesia
   // (MINEQ Indonesia, 2026) — harga kontrak/nego bisa berbeda signifikan.
-  tyreUnitPriceIDR: 170_000_000,
+  tyreUnitPriceIDR: 150_000_000,
   // Referensi harga BBM industri non-subsidi (HSFO/solar industri) awal
   // 2026 — SANGAT fluktuatif mengikuti harga minyak mentah & kurs, ganti
   // dengan harga kontrak BBM aktual situs.
@@ -274,26 +274,36 @@ export function recommendFrameVesselInspection(payloadAnalysis) {
 
 /**
  * Estimasi penghematan biaya ban dari perpanjangan umur pakai (RUL) X%.
- * Siklus penggantian "sebelum" dihitung dari RUL rata-rata (jam
- * operasional) & rata-rata jam operasional harian unit yang SUDAH ADA di
- * tyreData.js — bukan asumsi baru. Proyeksi "sesudah" adalah pendekatan
- * linear sederhana (lihat catatan metodologi).
+ *
+ * Basis "sesudah AI" = umur penuh rating ban baru (TYRE_LIFE_FULL_HOURS
+ * / jam operasional harian unit) — asumsinya: dengan AI (rotasi tepat
+ * waktu, tekanan terpantau, overload terdeteksi dini), ban bisa mencapai
+ * umur rating penuhnya. Basis "sebelum AI" = umur sesudah DIBAGI
+ * (1 + rulExtensionPct), karena tanpa AI ban rutin diganti lebih cepat
+ * dari rating penuhnya akibat faktor yang bisa dicegah (overload, tekanan
+ * tidak terpantau, rotasi telat — persis yang dideteksi AI Insight &
+ * modul Maintenance).
+ *
+ * Cakupan ban DIBATASI ke axle REAR saja (4 dari 6 ban unit HD785) —
+ * ban rear (dual, menopang porsi beban lebih besar) adalah yang paling
+ * sering jadi driver biaya penggantian; ban front (single, beban lebih
+ * ringan) jauh lebih awet dan bukan fokus utama business case ini.
  */
-export function estimateTyreCostSaving(rulExtensionPct, unit, assumptions = COST_ASSUMPTIONS) {
-  const avgRulHours = unit.tyres.reduce((s, t) => s + t.remainingUsefulLifeHours, 0) / unit.tyres.length;
+export function estimateTyreCostSaving(rulExtensionPct, unit, tyreLifeFullHours, assumptions = COST_ASSUMPTIONS) {
   const dailyOperatingHours = unit.operationalMetrics.averageDailyOperatingHours;
-  const tyreLifeDaysBefore = avgRulHours / dailyOperatingHours;
-  const tyreCount = unit.tyres.length;
+  const tyreLifeDaysAfter = tyreLifeFullHours / dailyOperatingHours;
+  const tyreLifeDaysBefore = tyreLifeDaysAfter / (1 + rulExtensionPct / 100);
+  const tyreCount = unit.tyres.filter((t) => t.axle === "REAR").length;
 
   const replacementsPerYearBefore = (365 / tyreLifeDaysBefore) * tyreCount;
   const annualTyreCostBefore = replacementsPerYearBefore * assumptions.tyreUnitPriceIDR;
 
-  const tyreLifeDaysAfter = tyreLifeDaysBefore * (1 + rulExtensionPct / 100);
   const replacementsPerYearAfter = (365 / tyreLifeDaysAfter) * tyreCount;
   const annualTyreCostAfter = replacementsPerYearAfter * assumptions.tyreUnitPriceIDR;
 
   return {
     rulExtensionPct,
+    tyreCount,
     tyreLifeDaysBefore: round1(tyreLifeDaysBefore),
     tyreLifeDaysAfter: round1(tyreLifeDaysAfter),
     replacementsPerYearBefore: round1(replacementsPerYearBefore),

@@ -4,10 +4,12 @@
  *
  * Menampilkan AI Predictive Insight untuk ban paling kritis pada unit DT001:
  * - Skor risiko blowout (health score + kimia/termal + overload muatan +
- *   kondisi jalan — lihat computeBlowoutRisk())
+ *   kondisi jalan + perilaku operator — lihat computeBlowoutRisk())
  * - Prediksi jendela waktu kegagalan (dari remainingUsefulLifeHours / averageDailyOperatingHours)
- * - Breakdown 4 faktor kontribusi, seluruhnya dari data real:
- *   degradasi kimia, suhu/tekanan, overload muatan, kondisi jalan tambang
+ * - Breakdown 5 faktor kontribusi, seluruhnya dari data real:
+ *   degradasi kimia, suhu/tekanan, overload muatan, kondisi jalan tambang,
+ *   perilaku operator (overspeed/harsh braking/harsh acceleration dari
+ *   services/drivingBehaviorModel.js)
  * - Rekomendasi tindakan spesifik dari AI
  *
  * Ditambah 2 bagian yang MENGHUBUNGKAN data dari seluruh segmen lain
@@ -20,16 +22,17 @@
  *   ilustratif untuk business case, lihat catatan metodologi di
  *   services/maintenanceModel.js.
  *
- * Catatan: analisis Perilaku Operator sengaja TIDAK diikutkan sebagai
- * faktor skor — SOP penilaian perilaku operator yang valid belum ada,
- * jadi datanya dilepas total supaya tidak memengaruhi Skor Risiko Blowout
- * atau rekomendasi apapun di halaman ini.
+ * Catatan: Perilaku Operator SEKARANG diikutkan sebagai faktor skor
+ * (sebelumnya sengaja dilepas karena modul Operator/drivingBehaviorModel.js
+ * belum ada). Bobotnya sengaja dibuat kecil relatif terhadap health score
+ * ban itu sendiri — lihat komentar di computeBlowoutRisk().
  *
  * Lokasi file: src/features/ai-insight/AiInsight.jsx
  */
 
 import { useState } from "react";
-import { fleet, TyreStatus, roadSegments, payloadCycles, estimateTyreRulDays, TYRE_LIFE_FULL_HOURS } from "../../services/tyreData";
+import { fleet, TyreStatus, roadSegments, payloadCycles, estimateTyreRulDays, TYRE_LIFE_FULL_HOURS, driverBehavior } from "../../services/tyreData";
+import { analyzeDrivingBehavior } from "../../services/drivingBehaviorModel";
 import { analyzePayloadCycles, analyzeCycleTimeForCycles } from "../../services/payloadModel";
 import {
   computeTKPHFromCycles,
@@ -42,6 +45,7 @@ import {
   estimateROISummary,
   DOWNTIME_RISK_NOTE,
   DOWNTIME_REDUCTION_RANGE_PCT,
+  COST_ASSUMPTIONS,
 } from "../../services/maintenanceModel";
 
 // ─────────────────────────────────────────────
@@ -66,9 +70,53 @@ function riskLevelFromScore(score) {
   return "LOW";
 }
 
+function round1(n) {
+  return Math.round(n * 10) / 10;
+}
+
 function riskStatusFromValue(value, criticalAt, warningAt) {
   if (value >= criticalAt) return TyreStatus.CRITICAL;
   if (value >= warningAt) return TyreStatus.WARNING;
+  return TyreStatus.NORMAL;
+}
+
+// Ambang batas sensor — DISAMAKAN dengan TyreMonitoring.jsx supaya warna
+// status ban konsisten lintas halaman (bukan cuma "merah kalau ada
+// masalah", tapi mengikuti rentang aman yang sama persis).
+//   Rear  (max 105 PSI): Good 105–102 · Warning 102–94 · Critical <94
+//   Front (max 102 PSI): Good 102–94  · Warning 94–87  · Critical <87
+function pressureStatus(psi, position) {
+  const isFront = position?.startsWith("Front");
+  if (isFront) {
+    if (psi < 87) return TyreStatus.CRITICAL;
+    if (psi < 94) return TyreStatus.WARNING;
+    return TyreStatus.NORMAL;
+  }
+  if (psi < 94) return TyreStatus.CRITICAL;
+  if (psi < 102) return TyreStatus.WARNING;
+  return TyreStatus.NORMAL;
+}
+
+function temperatureStatus(celsius) {
+  if (celsius > 93) return TyreStatus.CRITICAL;
+  if (celsius >= 80) return TyreStatus.WARNING;
+  return TyreStatus.NORMAL;
+}
+
+// Kartu "Suhu & Tekanan Operasional" menggabungkan 2 sensor jadi 1 bar —
+// warnanya ikut yang PALING PARAH di antara keduanya (sama seperti logika
+// prioritas alert di TyreMonitoring.jsx).
+const SEVERITY_RANK = { [TyreStatus.CRITICAL]: 0, [TyreStatus.WARNING]: 1, [TyreStatus.NORMAL]: 2 };
+function worseStatus(a, b) {
+  return SEVERITY_RANK[a] <= SEVERITY_RANK[b] ? a : b;
+}
+
+// Sisa umur ban (% dari TYRE_LIFE_FULL_HOURS) — makin tinggi makin baik,
+// jadi arahnya sama seperti health score. Threshold DISAMAKAN dengan
+// CircularScoreGauge di TyreMonitoring.jsx (score<40 Critical, <70 Warning).
+function rulStatusFromRemainingPct(remainingPct) {
+  if (remainingPct < 40) return TyreStatus.CRITICAL;
+  if (remainingPct < 70) return TyreStatus.WARNING;
   return TyreStatus.NORMAL;
 }
 
@@ -86,7 +134,7 @@ function aggregateRoadRisk(segments) {
 // AI SCORING — formula terdokumentasi, dari data real tyreData.js
 // ─────────────────────────────────────────────
 
-function computeBlowoutRisk(tyre, unit, roadRiskScore) {
+function computeBlowoutRisk(tyre, unit, roadRiskScore, drivingScore) {
   // Basis risiko: makin rendah health score, makin tinggi risiko blowout.
   const baseRisk = 100 - tyre.healthScore;
 
@@ -97,7 +145,13 @@ function computeBlowoutRisk(tyre, unit, roadRiskScore) {
   // eksternal (bukan kondisi fisik ban itu sendiri).
   const roadAdjustment = Math.round(roadRiskScore * 0.12);
 
-  const score = Math.min(99, Math.max(1, baseRisk + overloadAdjustment + roadAdjustment));
+  // Perilaku operator (drivingScore 0-100, dari analyzeDrivingBehavior —
+  // makin tinggi makin baik) dikonversi jadi "defisit" (100 - drivingScore)
+  // lalu diberi bobot kecil, sejajar dengan overload & kondisi jalan —
+  // sama-sama faktor eksternal terhadap kondisi fisik ban itu sendiri.
+  const operatorAdjustment = Math.round((100 - (drivingScore ?? 100)) * 0.15);
+
+  const score = Math.min(99, Math.max(1, baseRisk + overloadAdjustment + roadAdjustment + operatorAdjustment));
   return score;
 }
 
@@ -115,6 +169,7 @@ function StatusPill({ meta, className = "" }) {
     </span>
   );
 }
+
 
 function FactorBar({ label, value, valueLabel, colorStatus, sourceNote }) {
   const meta = STATUS_META[colorStatus];
@@ -390,7 +445,7 @@ function CostRoiSection({ unit, payloadAnalysis, cycleTimeAnalysis }) {
   // (estimasi skala 100 unit HD785), menggantikan estimasi sebelumnya
   // (18%, titik tengah brief tantangan "15–20%").
   const RUL_EXTENSION_PCT = 22.5;
-  const tyreSaving = estimateTyreCostSaving(RUL_EXTENSION_PCT, unit);
+  const tyreSaving = estimateTyreCostSaving(RUL_EXTENSION_PCT, unit, TYRE_LIFE_FULL_HOURS);
   const fuelSaving = estimateFuelSaving(payloadAnalysis, cycleTimeAnalysis);
   const roi = estimateROISummary(tyreSaving, fuelSaving, fleet.length);
 
@@ -418,8 +473,14 @@ function CostRoiSection({ unit, payloadAnalysis, cycleTimeAnalysis }) {
           </p>
           <p className="text-[#1A7A4A]/90 text-[12px] leading-snug">
             Perpanjangan umur ban {RUL_EXTENSION_PCT}% ({tyreSaving.tyreLifeDaysBefore} → {tyreSaving.tyreLifeDaysAfter} hari)
-            menurunkan kebutuhan penggantian dari {tyreSaving.replacementsPerYearBefore} menjadi{" "}
-            {tyreSaving.replacementsPerYearAfter} ban/tahun (asumsi harga ban {formatIDR(170_000_000)}/unit).
+            menurunkan kebutuhan penggantian turun{" "}
+            {round1(
+              ((tyreSaving.replacementsPerYearBefore - tyreSaving.replacementsPerYearAfter) /
+                tyreSaving.replacementsPerYearBefore) *
+                100
+            )}
+            %/tahun (dari {tyreSaving.replacementsPerYearBefore} ke {tyreSaving.replacementsPerYearAfter} ban/tahun,
+            asumsi harga ban {formatIDR(COST_ASSUMPTIONS.tyreUnitPriceIDR)}/unit).
           </p>
         </div>
 
@@ -541,6 +602,7 @@ function TabNav({ active, onChange }) {
 
 export default function AiInsight() {
   const [activeTab, setActiveTab] = useState("risk");
+  const [selectedTyreId, setSelectedTyreId] = useState("RLO-03");
   const unit = fleet.find((u) => u.unitId === "DT001") ?? fleet[0];
 
   const criticalTyre = unit?.tyres.reduce(
@@ -561,10 +623,20 @@ export default function AiInsight() {
   }
 
   const { overallRiskScore: roadRiskScore, mostDangerous: mostDangerousSegment } = aggregateRoadRisk(roadSegments);
+  const drivingAnalysis = analyzeDrivingBehavior(driverBehavior.speedProfile, driverBehavior.speedLimitKmh);
 
-  const riskScore = computeBlowoutRisk(criticalTyre, unit, roadRiskScore);
+  // Skor risiko dihitung untuk SELURUH ban unit ini (bukan cuma yang paling
+  // kritis), supaya tab Risk & Rekomendasi bisa nampilin ke-6 ban sekaligus.
+  const tyresWithRisk = unit.tyres.map((t) => ({
+    tyre: t,
+    riskScore: computeBlowoutRisk(t, unit, roadRiskScore, drivingAnalysis.overallScore),
+  }));
+
+  const selectedTyre = unit.tyres.find((t) => t.id === selectedTyreId) ?? criticalTyre;
+
+  const riskScore = computeBlowoutRisk(selectedTyre, unit, roadRiskScore, drivingAnalysis.overallScore);
   const riskLevel = RISK_META[riskLevelFromScore(riskScore)];
-  const remainingHours = criticalTyre.remainingUsefulLifeHours;
+  const remainingHours = selectedTyre.remainingUsefulLifeHours;
   const remainingKm = Math.max(
     0,
     Math.round(
@@ -587,13 +659,13 @@ export default function AiInsight() {
           </p>
           <h2 className="text-[#0B3B2D] text-lg font-bold tracking-tight">
             {unit.name} <span className="text-[#6B8F7A] font-medium text-sm">({unit.unitId})</span> — Ban{" "}
-            {criticalTyre.id}
+            {selectedTyre.id}
           </h2>
           <p className="text-[#6B8F7A] text-[12px] mt-1">
-            {criticalTyre.position} · {unit.site}
+            {selectedTyre.position} · {unit.site}
           </p>
         </div>
-        <StatusPill meta={STATUS_META[criticalTyre.status]} />
+        <StatusPill meta={STATUS_META[selectedTyre.status]} />
       </div>
 
       {/* ── TAB NAV ── */}
@@ -604,6 +676,44 @@ export default function AiInsight() {
           ══════════════════════════════════════════ */}
       {activeTab === "risk" && (
       <>
+      {/* ── PILIH BAN — semua 6 ban unit ini, klik untuk lihat detailnya ── */}
+      <div className="bg-white rounded-2xl border border-[#E8EDE9] p-4 shadow-sm">
+        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-3 px-1">
+          Semua Ban — {unit.name} ({unit.unitId})
+        </p>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {tyresWithRisk.map(({ tyre, riskScore: tyreRisk }) => {
+            const isSelected = tyre.id === selectedTyre.id;
+            const meta = STATUS_META[tyre.status];
+            return (
+              <button
+                key={tyre.id}
+                onClick={() => setSelectedTyreId(tyre.id)}
+                className={[
+                  "flex-shrink-0 w-[132px] text-left rounded-xl border p-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4ADE80]",
+                  isSelected ? "bg-[#0B3B2D] border-[#0B3B2D]" : "bg-[#F4F7F5] border-transparent hover:bg-[#EDF3EF]",
+                ].join(" ")}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className={["text-[12.5px] font-bold", isSelected ? "text-white" : "text-[#0B3B2D]"].join(" ")}>
+                    {tyre.id}
+                  </span>
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: meta.solid }}
+                  />
+                </div>
+                <p className={["text-[10px] leading-tight mb-2", isSelected ? "text-white/60" : "text-[#8FA89A]"].join(" ")}>
+                  {tyre.position}
+                </p>
+                <p className={["text-[10px] font-semibold", isSelected ? "text-white/70" : "text-[#6B8F7A]"].join(" ")}>
+                  Risk {tyreRisk}%
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
       {/* ── RISK SCORE & PREDIKSI WAKTU ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
@@ -638,13 +748,16 @@ export default function AiInsight() {
           </div>
           <div className="h-2 w-full bg-[#EDF3EF] rounded-full overflow-hidden mb-2">
             <div
-              className="h-full rounded-full bg-[#C84B31]"
-              style={{ width: `${Math.min(100, (remainingHours / TYRE_LIFE_FULL_HOURS) * 100)}%` }}
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.min(100, (remainingHours / TYRE_LIFE_FULL_HOURS) * 100)}%`,
+                backgroundColor: STATUS_META[rulStatusFromRemainingPct((remainingHours / TYRE_LIFE_FULL_HOURS) * 100)].solid,
+              }}
             />
           </div>
           <p className="text-[#6B8F7A] text-[11px]">
-            Estimasi dari Remaining Useful Life ban {criticalTyre.id} — {remainingHours.toLocaleString("id-ID")} jam
-            operasional tersisa (setara ~{estimateTyreRulDays(criticalTyre, unit)} hari pada rata-rata{" "}
+            Estimasi dari Remaining Useful Life ban {selectedTyre.id} — {remainingHours.toLocaleString("id-ID")} jam
+            operasional tersisa (setara ~{estimateTyreRulDays(selectedTyre, unit)} hari pada rata-rata{" "}
             {unit.operationalMetrics.averageDailyOperatingHours} jam operasional/hari, hanya sebagai gambaran waktu).
           </p>
         </div>
@@ -652,30 +765,30 @@ export default function AiInsight() {
 
       {/* ── FAKTOR KONTRIBUSI ── */}
       <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
-        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-4">
+        <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-1">
           Faktor Kontribusi Risiko
+        </p>
+        <p className="text-[#8FA89A] text-[11px] mb-4">
+          5 faktor di bawah ini membentuk Skor Risiko Blowout — lihat formula di computeBlowoutRisk()
         </p>
 
         <div className="flex flex-col gap-4">
           <FactorBar
             label="Degradasi Material Kimia"
-            value={criticalTyre.materialDegradationPct}
-            valueLabel={`${criticalTyre.materialDegradationPct}%`}
-            colorStatus={riskStatusFromValue(criticalTyre.materialDegradationPct, 40, 25)}
+            value={selectedTyre.materialDegradationPct}
+            valueLabel={`${selectedTyre.materialDegradationPct}%`}
+            colorStatus={riskStatusFromValue(selectedTyre.materialDegradationPct, 40, 25)}
             sourceNote="Dari sensor kimia ban — compound sudah mengalami penurunan struktur signifikan."
           />
           <FactorBar
             label="Suhu & Tekanan Operasional"
-            value={(criticalTyre.temperatureCelcius / 100) * 100}
-            valueLabel={`${criticalTyre.temperatureCelcius}°C · ${criticalTyre.pressurePsi} PSI`}
-            colorStatus={
-              criticalTyre.temperatureCelcius > 75 || criticalTyre.pressurePsi < 90
-                ? TyreStatus.CRITICAL
-                : criticalTyre.temperatureCelcius > 65 || criticalTyre.pressurePsi < 100
-                ? TyreStatus.WARNING
-                : TyreStatus.NORMAL
-            }
-            sourceNote="Suhu di atas ambang aman & tekanan di bawah rentang normal (95–105 PSI) mempercepat kegagalan struktural."
+            value={(selectedTyre.temperatureCelcius / 100) * 100}
+            valueLabel={`${selectedTyre.temperatureCelcius}°C · ${selectedTyre.pressurePsi} PSI`}
+            colorStatus={worseStatus(
+              temperatureStatus(selectedTyre.temperatureCelcius),
+              pressureStatus(selectedTyre.pressurePsi, selectedTyre.position)
+            )}
+            sourceNote="Suhu di atas ambang aman & tekanan di bawah rentang normal (posisi Rear: 102–105 PSI, Front: 94–102 PSI) mempercepat kegagalan struktural."
           />
           <FactorBar
             label="Frekuensi Overload Muatan (Unit)"
@@ -691,6 +804,13 @@ export default function AiInsight() {
             colorStatus={riskStatusFromValue(roadRiskScore, 60, 35)}
             sourceNote={`Segmen paling berisiko: ${mostDangerousSegment.name} (skor ${mostDangerousSegment.riskScore}) — ${mostDangerousSegment.tyreImpactNote}`}
           />
+          <FactorBar
+            label="Perilaku Operator"
+            value={100 - drivingAnalysis.overallScore}
+            valueLabel={`${drivingAnalysis.overallScore}/100 skor mengemudi`}
+            colorStatus={riskStatusFromValue(100 - drivingAnalysis.overallScore, 40, 20)}
+            sourceNote={`${drivingAnalysis.harshBrakingEvents.length} harsh braking, ${drivingAnalysis.harshAccelerationEvents.length} harsh acceleration, ${drivingAnalysis.overspeedSegments.length} segmen overspeed (7 hari terakhir, operator ${driverBehavior.operatorName}) — dari services/drivingBehaviorModel.js, sama seperti yang ditampilkan di modul Operator.`}
+          />
         </div>
       </div>
 
@@ -704,12 +824,13 @@ export default function AiInsight() {
         </div>
 
         <p className="text-white text-[14px] leading-relaxed mb-4">
-          Ban <strong>{criticalTyre.id}</strong> ({criticalTyre.position}) pada unit {unit.unitId} menunjukkan
-          degradasi material kimia sebesar <strong>{criticalTyre.materialDegradationPct}%</strong>, suhu
-          operasional <strong>{criticalTyre.temperatureCelcius}°C</strong>, dan tekanan{" "}
-          <strong>{criticalTyre.pressurePsi} PSI</strong> — berada jauh di bawah rentang aman. Ditambah dengan
+          Ban <strong>{selectedTyre.id}</strong> ({selectedTyre.position}) pada unit {unit.unitId} menunjukkan
+          degradasi material kimia sebesar <strong>{selectedTyre.materialDegradationPct}%</strong>, suhu
+          operasional <strong>{selectedTyre.temperatureCelcius}°C</strong>, dan tekanan{" "}
+          <strong>{selectedTyre.pressurePsi} PSI</strong> — berada jauh di bawah rentang aman. Ditambah dengan
           frekuensi overload muatan unit <strong>{unit.operationalMetrics.overloadFrequencyPct}%</strong>,
-          serta kondisi segmen <strong>{mostDangerousSegment.name}</strong> yang cukup berisiko (skor{" "}
+          skor perilaku mengemudi operator <strong>{drivingAnalysis.overallScore}/100</strong>, serta kondisi
+          segmen <strong>{mostDangerousSegment.name}</strong> yang cukup berisiko (skor{" "}
           <strong>{mostDangerousSegment.riskScore}</strong>), AI memperkirakan risiko blowout sebesar{" "}
           <strong>{riskScore}%</strong> dalam sisa <strong>{remainingKm.toLocaleString("id-ID")} km</strong>{" "}
           pemakaian ke depan.{" "}
@@ -735,9 +856,19 @@ export default function AiInsight() {
         </div>
       </div>
 
-      {/* ── MODUL PERBAIKAN — digabung dari Maintenance, berpusat di ban kritis yang sama ── */}
-      {healthiestTyre && (
-        <RepairModule unit={unit} targetTyre={criticalTyre} healthiestTyre={healthiestTyre} />
+      {/* ── MODUL PERBAIKAN — digabung dari Maintenance, berpusat di ban yang dipilih ── */}
+      {healthiestTyre && selectedTyre.id !== healthiestTyre.id ? (
+        <RepairModule unit={unit} targetTyre={selectedTyre} healthiestTyre={healthiestTyre} />
+      ) : (
+        <div className="bg-white rounded-2xl border border-[#E8EDE9] p-6 shadow-sm">
+          <p className="text-[#6B8F7A] text-[11px] font-semibold uppercase tracking-[0.08em] mb-2">
+            Modul Perbaikan
+          </p>
+          <p className="text-[#0B3B2D] text-[13px] leading-relaxed">
+            Ban <strong>{selectedTyre.id}</strong> adalah ban dengan kondisi terbaik di unit ini — tidak ada
+            tindakan rotasi/perbaikan yang direkomendasikan saat ini.
+          </p>
+        </div>
       )}
       </>
       )}

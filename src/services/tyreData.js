@@ -176,11 +176,12 @@ export const unitDT001 = {
     // Tidak butuh sensor tambahan — jam operasional (engine hour meter)
     // sudah tersedia bawaan di ECU unit dan ada di CAN bus (J1939, PGN
     // 65253 Engine Total Hours of Operation), ditarik via edge gateway
-    // yang sama dengan payload/jarak, dikirim lewat LoRa. Angka 10 jam/hari
-    // di bawah selaras dengan asumsi 1 shift (shiftMinutes = 600 di
-    // services/payloadModel.js) — ASUMSI, ganti dengan rata-rata jam
-    // operasional aktual unit begitu data historis situs tersedia.
-    averageDailyOperatingHours: 10,
+    // yang sama dengan payload/jarak, dikirim lewat LoRa. Angka 20 jam/hari
+    // di bawah selaras dengan operasi 2 shift (2 x shiftMinutes = 600 di
+    // services/payloadModel.js, jadi 2 x 10 jam = 20 jam/hari) — ASUMSI,
+    // ganti dengan rata-rata jam operasional aktual unit begitu data
+    // historis situs tersedia.
+    averageDailyOperatingHours: 20,
     operatingHoursDataSource: "Engine Hour Meter (ECU, via CAN bus J1939 PGN 65253)",
     operatingHoursIntegrationPath: "CAN Bus (J1939) → Edge Gateway → LoRa → TyreMind",
     // ── SUMBER DATA JARAK TEMPUH (dipakai untuk payload/TKPH/cycle time,
