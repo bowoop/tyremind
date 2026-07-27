@@ -426,7 +426,7 @@ export default function Operator() {
 
         {analysis.overallScore < 70 && (
           <div className="rounded-xl bg-[#FDF3E0] px-3.5 py-3 mt-5">
-            <p className="text-[#B8790E] text-[11.5px] font-bold">Reccomended Action</p>
+            <p className="text-[#B8790E] text-[11.5px] font-bold">Recommended Action</p>
             <p className="text-[#B8790E]/90 text-[10.5px] mt-0.5">
               Kurangi overspeed dan harsh braking di segmen berisiko tinggi untuk memperpanjang umur ban.
             </p>
