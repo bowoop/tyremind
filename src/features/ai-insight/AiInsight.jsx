@@ -602,7 +602,7 @@ function TabNav({ active, onChange }) {
 
 export default function AiInsight() {
   const [activeTab, setActiveTab] = useState("risk");
-  const [selectedTyreId, setSelectedTyreId] = useState("RLO-03");
+  const [selectedTyreId, setSelectedTyreId] = useState(null);
   const unit = fleet.find((u) => u.unitId === "DT001") ?? fleet[0];
 
   const criticalTyre = unit?.tyres.reduce(
